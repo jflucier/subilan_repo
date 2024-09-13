@@ -16,11 +16,11 @@ library(limma)
 library(TxDb.Mmusculus.UCSC.mm10.knownGene)
 
 option_list = list(
-  make_option(c("-gm", "--gene_matrix"), type="character", default=NULL, help="diann gene matrix output file name", metavar="character"),
-  make_option(c("-fc", "--fc_col"), type="character", default=NULL, help="Sepcifify a column header with logfold to perform gsea", metavar="character"),
+  make_option(c("-m", "--gene_matrix"), type="character", default=NULL, help="diann gene matrix output file name", metavar="character"),
+  make_option(c("-f", "--fc_col"), type="character", default=NULL, help="Sepcifify a column header with logfold to perform gsea", metavar="character"),
   make_option(c("-o", "--out"), type="character", default=NULL, help="output dir", metavar="character"),
-  make_option(c("-sp", "--specie"), type="character", default=NULL, help="Species: Hs, Mm", metavar="character"),
-  make_option(c("-gs", "--geneset"), type="character", default=NULL, help="Gene set: kegg, go, MSigDB", metavar="character")
+  make_option(c("-s", "--specie"), type="character", default=NULL, help="Species: Hs, Mm", metavar="character"),
+  make_option(c("-g", "--geneset"), type="character", default=NULL, help="Gene set: kegg, go, MSigDB", metavar="character")
 );
 
 opt_parser = OptionParser(option_list=option_list);
@@ -32,16 +32,20 @@ if (is.null(opt$gene_matrix)){
 }
 
 f <- opt$gene_matrix
+fc_col <- opt$fc_col
+o <- opt$out
+sp <- opt$specie
+gs <- opt$geneset
 
 # test
-f <- "/storage/Documents/service/externe/ilan/20240702_mouse_ms_organoid/gsean_outliersfiltered/all_folds.tsv"
-gs <- "kegg"
-gs <- "go"
-gs <- "MSigDB"
-# o <- paste("/storage/Documents/service/externe/ilan/20240702_mouse_ms_organoid/gsea/",gs,sep='')
-o <- "/storage/Documents/service/externe/ilan/20240702_mouse_ms_organoid/gsean_outliersfiltered"
-sp <- "Mm"
-fc_col <- "fc"
+# f <- "/storage/Documents/service/externe/sheela/20240729_mouse_ms_lysM/results_rmoutliers/report.pg_matrix.proteoptypic.dge.modif.tsv"
+# gs <- "kegg"
+# # gs <- "go"
+# # gs <- "MSigDB"
+# # o <- paste("/storage/Documents/service/externe/ilan/20240702_mouse_ms_organoid/gsea/",gs,sep='')
+# o <- "/storage/Documents/service/externe/sheela/20240729_mouse_ms_lysM/results_rmoutliers/gsea"
+# sp <- "Mm"
+# fc_col <- "X15KO_vs_WT_diff"
 
 g_list= read.csv(
   f, 
@@ -83,7 +87,7 @@ gsca <- GSCA(
 gsca1 <- preprocess(
   gsca, 
   species=sp, 
-  initialIDs="SYMBOL",
+  initialIDs="UNIPROT",
   keepMultipleMappings=TRUE, 
   duplicateRemoverMethod="max",
   orderAbsValue=FALSE
@@ -120,6 +124,7 @@ if (gs == "kegg") {
     allSig=TRUE
   )
   
+  d <- gsca3@result[["GSEA.results"]][["PW_KEGG"]]
 } else if (gs == "go") {
   message ("append go gene sets terms")
   gsca3 <- appendGSTerms(
@@ -134,6 +139,7 @@ if (gs == "kegg") {
     gscs=gscs,
     allSig=TRUE
   )
+  d <- gsca3@result[["GSEA.results"]][["GO"]]
 } else {
   message ("append MSig gene sets terms")
   gsca3 <- appendGSTerms(
@@ -148,16 +154,38 @@ if (gs == "kegg") {
     gscs=gscs,
     allSig=TRUE
   )
+  d <- gsca3@result[["GSEA.results"]][["MSig_C2"]]
 }
 
 
 
 ## draw GSEA plot for a specific gene set
-out <- paste(o,gs,sep='/')
-report(gsca3,reportDir = out, gseaPlot = FALSE)
+n <- paste(fc_col,gs,sep='_')
 t <- list.dirs(path = o, recursive = FALSE)
-t <- grep(gs, t, value = TRUE)
-plotGSEA(gsca3, gscs=gscs, ntop=10, filepath=t)
+t <- grep(n, t, value = TRUE)
+out <- paste(o,n,sep='/')
+if (!dir.exists(out)){
+  dir.create(out, showWarnings = TRUE)
+}
+print("Outputting GSEA")
+if (length(topGS) > 0) {
+  plotGSEA(gsca3, gscs=gscs, filepath=out, allSig=TRUE)
+}
+
+print("Outputting geneset TSV")
+write.table(
+  data.frame("Gene.Set"=rownames(d),d),
+  file = paste0(out,"/genesets.tsv"),
+  sep = "\t",
+  row.names = FALSE
+)
+
+print("done!")
+
+# out <- paste(o,n,sep='/')
+# report(gsca3,reportDir = out, gseaPlot = TRUE)
+# summarize(gsca3)
+
 
 
 
