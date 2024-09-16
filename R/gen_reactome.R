@@ -50,6 +50,7 @@ gen_reactome <- function(f, o, gene_col, fc_col, pval_col, gs_source, sp_lbl, pi
   dir.create(o, showWarnings = TRUE, recursive = TRUE)
   d <- paste(o,pin,sep='/')
   # dir.create(d, showWarnings = TRUE, recursive = TRUE)
+  print("before run_pathfindR")
   output_df <- run_pathfindR(
     g_list,
     output_dir = d,
@@ -61,8 +62,9 @@ gen_reactome <- function(f, o, gene_col, fc_col, pval_col, gs_source, sp_lbl, pi
     #pin_name_path = "STRING"
     pin_name_path = pin
   )
-  
+  print("after run_pathfindR")
   output_df_clustered <- cluster_enriched_terms(output_df, plot_dend = FALSE, plot_clusters_graph = FALSE)
+  print("before after clusering")
   out=paste(d,"enrichment_chart.tsv",sep='/')
   write.table(output_df_clustered, file = out, sep = "\t")
   
