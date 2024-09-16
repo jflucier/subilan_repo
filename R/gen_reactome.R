@@ -51,7 +51,7 @@ gen_reactome <- function(f, o, gene_col, fc_col, pval_col, gs_source, sp_lbl, pi
   dir.create(o, showWarnings = TRUE, recursive = TRUE)
   d <- paste(o,pin,sep='/')
   # dir.create(d, showWarnings = TRUE, recursive = TRUE)
-  print("running run_pathfindR")
+  print(paste("running run_pathfindR using geneset ", gs_source, " and pin ", pin, sep= ""))
   output_df <- run_pathfindR(
     g_list,
     output_dir = d,
