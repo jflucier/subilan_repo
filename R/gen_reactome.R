@@ -59,7 +59,7 @@ gen_reactome <- function(f, o, gene_col, fc_col, pval_col, gs_source, sp_lbl, pi
     custom_descriptions = gsets_list$descriptions,
     min_gset_size = 10,
     max_gset_size = 300,
-    n_processes = 4,
+    n_processes = 8,
     #pin_name_path = "STRING"
     pin_name_path = pin
   )
