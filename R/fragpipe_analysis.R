@@ -28,10 +28,11 @@ library("optparse")
 # }
 # ' report.pg_matrix.tsv > report.pg_matrix.proteoptypic.tsv
 
-# bp <- "/storage/Documents/service/externe/sheela/20240829_HSCs_liver_mouse"
+# bp <- "/storage/Documents/service/externe/sheela/20240729_mouse_ms_lysM"
 # out_bp <- paste0(bp,"/fragpipe")
-# in_diann <- "/storage/Documents/service/externe/sheela/20240829_HSCs_liver_mouse/diann/report.pg_matrix.proteoptypic.tsv"
-# in_design <- "/storage/Documents/service/externe/sheela/20240829_HSCs_liver_mouse/experiment_annotation.tsv"
+# in_diann <- "/storage/Documents/service/externe/sheela/20240729_mouse_ms_lysM/results/report.pg_matrix.proteoptypic.tsv"
+# in_design <- "/storage/Documents/service/externe/sheela/20240729_mouse_ms_lysM/experiment_annotation.tsv"
+
 option_list = list(
   make_option(c("-o", "--out"), type="character", default=NULL, help="output dir", metavar="character"),
   make_option(c("-m", "--matrix"), type="character", default=NULL, help="diann pg matrix filtered for proteotypic proteins", metavar="character"),
@@ -97,10 +98,12 @@ plot_volcano(de_result_updated, "X15KO_vs_LysM_plus", name_col = "Genes")
 dev.off()
 
 x <- de_result_updated@elementMetadata@listData
+y <- data.frame("rowid"=x[["Protein.Group"]],x)
 write.table(
-  x,
+  data.frame("rowid"=rownames(y),x),
   file = paste0(out_bp,"/report.pg_matrix.proteoptypic.dge.tsv"),
-  sep = "\t"
+  sep = "\t",
+  row.names = FALSE
 )
 
 pdf(
@@ -118,8 +121,9 @@ plot_volcano(de_result_updated, "X15KO_vs_LysM_plus", name_col = "Genes")
 dev.off()
 
 x <- de_result_updated@elementMetadata@listData
+y <- data.frame("rowid"=x[["Protein.Group"]],x)
 write.table(
-  data.frame("Gene.Set"=rownames(x),x),
+  data.frame("rowid"=rownames(y),x),
   file = paste0(out_bp,"/report.pg_matrix.proteoptypic.dge_imputed.tsv"),
   sep = "\t",
   row.names = FALSE
