@@ -142,7 +142,7 @@ gen_reactome(
   o, 
   gene_col, 
   paste(comp_label,"_diff",sep=''), 
-  paste(comp_label,"_p.adj",sep=''), , 
+  paste(comp_label,"_p.adj",sep=''),
   gs_source, 
   sp, 
   pin
