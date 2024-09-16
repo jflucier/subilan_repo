@@ -27,10 +27,22 @@ library(FragPipeAnalystR)
 # }
 # ' report.pg_matrix.tsv > report.pg_matrix.proteoptypic.tsv
 
-bp <- "/storage/Documents/service/externe/sheela/20240829_HSCs_liver_mouse"
-out_bp <- paste0(bp,"/fragpipe")
-in_diann <- "/storage/Documents/service/externe/sheela/20240829_HSCs_liver_mouse/diann/report.pg_matrix.proteoptypic.tsv"
-in_design <- "/storage/Documents/service/externe/sheela/20240829_HSCs_liver_mouse/experiment_annotation.tsv"
+# bp <- "/storage/Documents/service/externe/sheela/20240829_HSCs_liver_mouse"
+# out_bp <- paste0(bp,"/fragpipe")
+# in_diann <- "/storage/Documents/service/externe/sheela/20240829_HSCs_liver_mouse/diann/report.pg_matrix.proteoptypic.tsv"
+# in_design <- "/storage/Documents/service/externe/sheela/20240829_HSCs_liver_mouse/experiment_annotation.tsv"
+option_list = list(
+  make_option(c("-o", "--out"), type="character", default=NULL, help="output dir", metavar="character"),
+  make_option(c("-i", "--in"), type="character", default=NULL, help="diann pg matrix filtered for proteotypic proteins", metavar="character"),
+  make_option(c("-d", "--design"), type="character", default=NULL, help="Fragpipe TSV design file. Header is: file\tsample\tsample_name\tcondition\treplicate", metavar="character")
+);
+
+opt_parser = OptionParser(option_list=option_list);
+opt = parse_args(opt_parser);
+
+out_bp <- opt$out
+in_diann <- opt$in
+in_design <- opt$design
 
 ccrcc <- make_se_from_files(
   in_diann,
