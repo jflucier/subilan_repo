@@ -132,7 +132,7 @@ sp <- opt$specie
 pin <- opt$pin
 
 print(paste("##### Running",gs_source, sep = " "))
-out <- paste(out,comp_label,sep='/')
+out <- paste(b_out,comp_label,sep='/')
 if (!dir.exists(out)){
   dir.create(out, showWarnings = TRUE, recursive = TRUE)
 }
