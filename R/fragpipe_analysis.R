@@ -45,6 +45,10 @@ out_bp <- opt$out
 in_diann <- opt$matrix
 in_design <- opt$design
 
+if (!dir.exists(out_bp)){
+  dir.create(out_bp, showWarnings = TRUE)
+}
+
 ccrcc <- make_se_from_files(
   in_diann,
   in_design,
