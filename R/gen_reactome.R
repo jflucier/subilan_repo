@@ -110,8 +110,7 @@ option_list = list(
   make_option(c("-o", "--out"), type="character", default=NULL, help="output dir", metavar="character"),
   make_option(c("-s", "--specie"), type="character", default=NULL, help="Species: human, mouse", metavar="character"),
   make_option(c("-g", "--gene_col"), type="character", default=NULL, help="Gene header column", metavar="character"),
-  make_option(c("-f", "--fc_col"), type="character", default=NULL, help="Sepcifify a column header with logfold", metavar="character"),
-  make_option(c("-p", "--pval_col"), type="character", default=NULL, help="Sepcifify a column header with pvalues", metavar="character"),
+  make_option(c("-c", "--comp_label"), type="character", default=NULL, help="Sepcifify a column header with logfold", metavar="character"),
   make_option(c("--gene_source"), type="character", default=NULL, help="Gene source: KEGG, Reactome, MSigDB", metavar="character"),
   make_option(c("--pin"), type="character", default=NULL, help="PIN: Biogrid, STRING, IntAct, KEGG, mmu_STRING", metavar="character")
 );
@@ -125,17 +124,26 @@ if (is.null(opt$input)){
 }
 
 f <- opt$input
-out <- opt$out
+b_out <- opt$out
 gene_col <- opt$gene_col
-fc_col <- opt$fc_col
-pval_col <- opt$pval_col
+comp_label <- opt$comp_label
 gs_source <- opt$gene_source
 sp <- opt$specie
 pin <- opt$pin
 
 print(paste("##### Running",gs_source, sep = " "))
+out <- paste(out,comp_label,sep='/')
 if (!dir.exists(out)){
   dir.create(out, showWarnings = TRUE, recursive = TRUE)
 }
 o <- paste(out,gs_source,sep='/')
-gen_reactome(f, o, gene_col, fc_col, pval_col, gs_source, sp, pin)
+gen_reactome(
+  f, 
+  o, 
+  gene_col, 
+  paste(comp_label,"_diff",sep=''), 
+  paste(comp_label,"_p.adj",sep=''), , 
+  gs_source, 
+  sp, 
+  pin
+)
