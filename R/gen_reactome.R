@@ -4,6 +4,7 @@ library(tidyverse)
 library("optparse")
 
 gen_reactome <- function(f, o, gene_col, fc_col, pval_col, gs_source, sp_lbl, pin) {
+  print("reading gene list")
   g_list= read.csv(
     f, 
     header = TRUE,
@@ -50,7 +51,7 @@ gen_reactome <- function(f, o, gene_col, fc_col, pval_col, gs_source, sp_lbl, pi
   dir.create(o, showWarnings = TRUE, recursive = TRUE)
   d <- paste(o,pin,sep='/')
   # dir.create(d, showWarnings = TRUE, recursive = TRUE)
-  print("before run_pathfindR")
+  print("running run_pathfindR")
   output_df <- run_pathfindR(
     g_list,
     output_dir = d,
@@ -62,9 +63,9 @@ gen_reactome <- function(f, o, gene_col, fc_col, pval_col, gs_source, sp_lbl, pi
     #pin_name_path = "STRING"
     pin_name_path = pin
   )
-  print("after run_pathfindR")
+  print("clustering terms...")
   output_df_clustered <- cluster_enriched_terms(output_df, plot_dend = FALSE, plot_clusters_graph = FALSE)
-  print("before after clusering")
+  print("outputting enrichment chart in TSV")
   out=paste(d,"enrichment_chart.tsv",sep='/')
   write.table(output_df_clustered, file = out, sep = "\t")
   
@@ -72,6 +73,7 @@ gen_reactome <- function(f, o, gene_col, fc_col, pval_col, gs_source, sp_lbl, pi
   selected_clusters <- subset(output_df_clustered[output_df_clustered$Status == "Representative", ], Cluster %in% 1:10)
   
   # output png enrichment chart
+  print("outputting enrichment chart in png")
   out=paste(d,"enrichment_chart.png",sep='/')
   png(
     filename = out,
@@ -84,6 +86,7 @@ gen_reactome <- function(f, o, gene_col, fc_col, pval_col, gs_source, sp_lbl, pi
   dev.off()
   
   # output png enrichment chart
+  print("outputting enrichment chart in svg")
   out=paste(d,"enrichment_chart.svg",sep='/')
   svg(
     filename = out,
@@ -93,54 +96,6 @@ gen_reactome <- function(f, o, gene_col, fc_col, pval_col, gs_source, sp_lbl, pi
   plot(enrichment_chart(selected_clusters, plot_by_cluster = TRUE))
   dev.off()
 }
-  #for (pin in c('Biogrid', 'STRING', 'GeneMania', 'IntAct', 'KEGG', 'mmu_STRING')) {
-  # for (pin in c('Biogrid', 'STRING', 'IntAct', 'KEGG', 'mmu_STRING')) {
-  #   print(paste("pin=",pin, sep= " "))
-  #   d <- paste(o,pin,sep='/')
-  #   # dir.create(d, showWarnings = TRUE, recursive = TRUE)
-  #   output_df <- run_pathfindR(
-  #     g_list,
-  #     output_dir = d,
-  #     custom_genes = gsets_list$gene_sets,
-  #     custom_descriptions = gsets_list$descriptions,
-  #     min_gset_size = 10,
-  #     max_gset_size = 300,
-  #     n_processes = 4,
-  #     #pin_name_path = "STRING"
-  #     pin_name_path = pin
-  #   )
-  # 
-  #   output_df_clustered <- cluster_enriched_terms(output_df, plot_dend = FALSE, plot_clusters_graph = FALSE)
-  #   out=paste(d,"enrichment_chart.tsv",sep='/')
-  #   write.table(output_df_clustered, file = out, sep = "\t")
-  #   
-  #   # plotting only selected clusters for better visualization
-  #   selected_clusters <- subset(output_df_clustered[output_df_clustered$Status == "Representative", ], Cluster %in% 1:10)
-  #   
-  #   # output png enrichment chart
-  #   out=paste(d,"enrichment_chart.png",sep='/')
-  #   png(
-  #     filename = out,
-  #     res = 250,
-  #     width = 8,
-  #     height = 4,
-  #     units = "in"
-  #   )
-  #   plot(enrichment_chart(selected_clusters, plot_by_cluster = TRUE))
-  #   dev.off()
-  #   
-  #   # output png enrichment chart
-  #   out=paste(d,"enrichment_chart.svg",sep='/')
-  #   svg(
-  #     filename = out,
-  #     width = 8,
-  #     height = 4
-  #   )
-  #   plot(enrichment_chart(selected_clusters, plot_by_cluster = TRUE))
-  #   dev.off()
-  # }
-# }
-
 
 # f <- "/storage/Documents/service/externe/sheela/20240729_mouse_ms_lysM/results_rmoutliers/report.pg_matrix.proteoptypic.dge.modif.tsv"
 # sp <- "mouse"
@@ -184,198 +139,3 @@ if (!dir.exists(out)){
 }
 o <- paste(out,gs_source,sep='/')
 gen_reactome(f, o, gene_col, fc_col, pval_col, gs_source, sp, pin)
-
-# f <- "/storage/Documents/service/externe/sheela/20240729_mouse_ms_lysM/results_rmoutliers/report.pg_matrix.proteoptypic.dge.modif.tsv"
-# sp <- "mouse"
-# sp_lbl <- sp
-# out <- "/storage/Documents/service/externe/sheela/20240729_mouse_ms_lysM/results_rmoutliers/reactome/X15KO_vs_WT"
-# gene_col <- "Genes"
-# fc_col <- "X15KO_vs_WT_diff"
-# pval_col <- "X15KO_vs_WT_p.adj"
-# 
-# dir.create(out, showWarnings = TRUE, recursive = TRUE)
-# for (gs_source in c('KEGG', 'Reactome', 'MSigDB')) {
-#   tmp <- out
-#   o <- paste(tmp,gs_source,sep='/')
-#   print(paste("##### Running",gs_source, sep = " "))
-#   gen_reactome(f, o, gene_col, fc_col, pval_col, gs_source, sp)
-# }
-# 
-# f <- "/storage/Documents/service/externe/sheela/20240729_mouse_ms_lysM/results_rmoutliers/report.pg_matrix.proteoptypic.dge.modif.tsv"
-# sp <- "mouse"
-# sp_lbl <- sp
-# out <- "/storage/Documents/service/externe/sheela/20240729_mouse_ms_lysM/results_rmoutliers/reactome/LysM_minus_vs_WT"
-# gene_col <- "Genes"
-# fc_col <- "LysM_minus_vs_WT_diff"
-# pval_col <- "LysM_minus_vs_WT_p.adj"
-# 
-# dir.create(out, showWarnings = TRUE, recursive = TRUE)
-# for (gs_source in c('KEGG', 'Reactome', 'MSigDB')) {
-#   tmp <- out
-#   o <- paste(tmp,gs_source,sep='/')
-#   print(paste("##### Running",gs_source, sep = " "))
-#   gen_reactome(f, o, gene_col, fc_col, pval_col, gs_source, sp)
-# }
-# 
-# f <- "/storage/Documents/service/externe/sheela/20240729_mouse_ms_lysM/results_rmoutliers/report.pg_matrix.proteoptypic.dge.modif.tsv"
-# sp <- "mouse"
-# sp_lbl <- sp
-# out <- "/storage/Documents/service/externe/sheela/20240729_mouse_ms_lysM/results_rmoutliers/reactome/LysM_plus_vs_WT"
-# gene_col <- "Genes"
-# fc_col <- "LysM_plus_vs_WT_diff"
-# pval_col <- "LysM_plus_vs_WT_p.adj"
-# 
-# dir.create(out, showWarnings = TRUE, recursive = TRUE)
-# for (gs_source in c('KEGG', 'Reactome', 'MSigDB')) {
-#   tmp <- out
-#   o <- paste(tmp,gs_source,sep='/')
-#   print(paste("##### Running",gs_source, sep = " "))
-#   gen_reactome(f, o, gene_col, fc_col, pval_col, gs_source, sp)
-# }
-# 
-# f <- "/storage/Documents/service/externe/sheela/20240729_mouse_ms_lysM/results_rmoutliers/report.pg_matrix.proteoptypic.dge.modif.tsv"
-# sp <- "mouse"
-# sp_lbl <- sp
-# out <- "/storage/Documents/service/externe/sheela/20240729_mouse_ms_lysM/results_rmoutliers/reactome/X15KO_vs_LysM_minus"
-# gene_col <- "Genes"
-# fc_col <- "X15KO_vs_LysM_minus_diff"
-# pval_col <- "X15KO_vs_LysM_minus_p.adj"
-# 
-# dir.create(out, showWarnings = TRUE, recursive = TRUE)
-# for (gs_source in c('KEGG', 'Reactome', 'MSigDB')) {
-#   tmp <- out
-#   o <- paste(tmp,gs_source,sep='/')
-#   print(paste("##### Running",gs_source, sep = " "))
-#   gen_reactome(f, o, gene_col, fc_col, pval_col, gs_source, sp)
-# }
-# 
-# f <- "/storage/Documents/service/externe/sheela/20240729_mouse_ms_lysM/results_rmoutliers/report.pg_matrix.proteoptypic.dge.modif.tsv"
-# sp <- "mouse"
-# sp_lbl <- sp
-# out <- "/storage/Documents/service/externe/sheela/20240729_mouse_ms_lysM/results_rmoutliers/reactome/X15KO_vs_LysM_plus"
-# gene_col <- "Genes"
-# fc_col <- "X15KO_vs_LysM_plus_diff"
-# pval_col <- "X15KO_vs_LysM_plus_p.adj"
-# 
-# dir.create(out, showWarnings = TRUE, recursive = TRUE)
-# for (gs_source in c('KEGG', 'Reactome', 'MSigDB')) {
-#   tmp <- out
-#   o <- paste(tmp,gs_source,sep='/')
-#   print(paste("##### Running",gs_source, sep = " "))
-#   gen_reactome(f, o, gene_col, fc_col, pval_col, gs_source, sp)
-# }
-
-
-### analysis
-
-# common param
-# f <- "/storage/Documents/service/externe/ilan/20230606_Mouse_DIA_MS/reactome/gene_list.tsv"
-# # specie can be human or mouse
-# sp <- "mouse"
-# sp_lbl <- sp
-
-### NLRC5d
-# o <- "/storage/Documents/service/externe/ilan/20230606_Mouse_DIA_MS/reactome/NLRC5d"
-# fc_col <- "NLRC5d_fc"
-# pval_col <- "ttest_NLRC5dvsWT"
-# 
-# gs_source <- 'KEGG'
-# out <- paste(o,gs_source,sep='/')
-# print(paste("##### Running",gs_source, sep = " "))
-# gen_reactome(f, out, fc_col, pval_col, gs_source, sp)
-# gs_source <- 'Reactome'
-# out <- paste(o,gs_source,sep='/')
-# print(paste("##### Running",gs_source, sep = " "))
-# gen_reactome(f, out, fc_col, pval_col, gs_source, sp)
-# gs_source <- 'MSigDB'
-# oo <- paste(o,gs_source,sep='/')
-# print(paste("##### Running",gs_source, sep = " "))
-# gen_reactome(f, oo, fc_col, pval_col, gs_source, sp)
-
-### RAG1d
-# o <- "/storage/Documents/service/externe/ilan/20230606_Mouse_DIA_MS/reactome/RAG1d"
-# fc_col <- "RAG1d_fc"
-# pval_col <- "ttest_RAG1dvsWT"
-# 
-# gs_source <- 'KEGG'
-# out <- paste(o,gs_source,sep='/')
-# print(paste("##### Running",gs_source, sep = " "))
-# gen_reactome(f, out, fc_col, pval_col, gs_source, sp)
-# gs_source <- 'Reactome'
-# out <- paste(o,gs_source,sep='/')
-# print(paste("##### Running",gs_source, sep = " "))
-# gen_reactome(f, out, fc_col, pval_col, gs_source, sp)
-# gs_source <- 'MSigDB'
-# oo <- paste(o,gs_source,sep='/')
-# print(paste("##### Running",gs_source, sep = " "))
-# gen_reactome(f, oo, fc_col, pval_col, gs_source, sp)
-
-
-# ### NLRC5 vs RAG1d
-# f <- "/storage/Documents/service/externe/ilan/20230606_Mouse_DIA_MS/reactome/gene_list_nlrc5vsrag1.tsv"
-# # specie can be human or mouse
-# sp <- "mouse"
-# sp_lbl <- sp
-# o <- "/storage/Documents/service/externe/ilan/20230606_Mouse_DIA_MS/reactome/NLRC5vsRAG1d"
-# fc_col <- "fc_NLRC5dvsRAG1d"
-# pval_col <- "ttest_NLRC5dvsRAG1d"
-# 
-# gs_source <- 'KEGG'
-# out <- paste(o,gs_source,sep='/')
-# print(paste("##### Running",gs_source, sep = " "))
-# gen_reactome(f, out, fc_col, pval_col, gs_source, sp)
-# gs_source <- 'Reactome'
-# out <- paste(o,gs_source,sep='/')
-# print(paste("##### Running",gs_source, sep = " "))
-# gen_reactome(f, out, fc_col, pval_col, gs_source, sp)
-# gs_source <- 'MSigDB'
-# oo <- paste(o,gs_source,sep='/')
-# print(paste("##### Running",gs_source, sep = " "))
-# gen_reactome(f, oo, fc_col, pval_col, gs_source, sp)
-
-# ### 20240702_mouse_ms_organoid
-# f <- "/storage/Documents/service/externe/ilan/20240702_mouse_ms_organoid/reactome/gene_list.tsv"
-# # specie can be human or mouse
-# sp <- "mouse"
-# sp_lbl <- sp
-# o <- "/storage/Documents/service/externe/ilan/20240702_mouse_ms_organoid/reactome"
-# fc_col <- "fc_KOvsWT"
-# pval_col <- "ttest_KOvsWT"
-# 
-# gs_source <- 'KEGG'
-# out <- paste(o,gs_source,sep='/')
-# print(paste("##### Running",gs_source, sep = " "))
-# gen_reactome(f, out, fc_col, pval_col, gs_source, sp)
-# gs_source <- 'Reactome'
-# out <- paste(o,gs_source,sep='/')
-# print(paste("##### Running",gs_source, sep = " "))
-# gen_reactome(f, out, fc_col, pval_col, gs_source, sp)
-# gs_source <- 'MSigDB'
-# oo <- paste(o,gs_source,sep='/')
-# print(paste("##### Running",gs_source, sep = " "))
-# gen_reactome(f, oo, fc_col, pval_col, gs_source, sp)
-# 
-# ### 20240729_mouse_ms_lysM
-# f <- "/storage/Documents/service/externe/sheela/20240729_mouse_ms_lysM/results_rmoutliers/report.pg_matrix.proteoptypic.dge.modif.tsv"
-# # specie can be human or mouse
-# sp <- "mouse"
-# sp_lbl <- sp
-# o <- "/storage/Documents/service/externe/sheela/20240729_mouse_ms_lysM/results_rmoutliers/reactome"
-# gene_col <- "Genes"
-# fc_col <- "X15KO_vs_WT_diff"
-# pval_col <- "X15KO_vs_WT_p.adj"
-# 
-# gs_source <- 'KEGG'
-# out <- paste(o,gs_source,sep='/')
-# print(paste("##### Running",gs_source, sep = " "))
-# gen_reactome(f, out, gene_col, fc_col, pval_col, gs_source, sp)
-# gs_source <- 'Reactome'
-# out <- paste(o,gs_source,sep='/')
-# print(paste("##### Running",gs_source, sep = " "))
-# gen_reactome(f, out, fc_col, pval_col, gs_source, sp)
-# gs_source <- 'MSigDB'
-# oo <- paste(o,gs_source,sep='/')
-# print(paste("##### Running",gs_source, sep = " "))
-# gen_reactome(f, oo, fc_col, pval_col, gs_source, sp)
-
-
