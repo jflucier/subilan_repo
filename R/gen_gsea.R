@@ -75,8 +75,6 @@ if (gs == "kegg") {
 
 phenotype <- as.vector(g_list[[fc_col]])
 names(phenotype) <- rownames(g_list)
-# ListGSC <- list(PW_KEGG=PW_KEGG)
-# ListGSC <- list(GO=GO, PW_KEGG=PW_KEGG, MSig_C2=MSig_C2)
 
 gsca <- GSCA(
   listOfGeneSetCollections=ListGSC, 
@@ -95,7 +93,7 @@ gsca1 <- preprocess(
 
 ## analysis
 if (requireNamespace("doParallel", quietly=TRUE)) {
-    doParallel::registerDoParallel(cores=4)
+    doParallel::registerDoParallel(cores=8)
 }  ## support parallel calculation using multiple cores
 gsca2 <- analyze(
   gsca1, 

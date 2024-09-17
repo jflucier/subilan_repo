@@ -50,7 +50,6 @@ gen_reactome <- function(f, o, gene_col, fc_col, pval_col, gs_source, sp_lbl, pi
   
   dir.create(o, showWarnings = TRUE, recursive = TRUE)
   d <- paste(o,pin,sep='/')
-  # dir.create(d, showWarnings = TRUE, recursive = TRUE)
   print(paste("running run_pathfindR using geneset ", gs_source, " and pin ", pin, sep= ""))
   output_df <- run_pathfindR(
     g_list,
@@ -60,7 +59,6 @@ gen_reactome <- function(f, o, gene_col, fc_col, pval_col, gs_source, sp_lbl, pi
     min_gset_size = 10,
     max_gset_size = 300,
     n_processes = 8,
-    #pin_name_path = "STRING"
     pin_name_path = pin
   )
   print("clustering terms...")
