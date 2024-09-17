@@ -17,7 +17,7 @@ library(TxDb.Mmusculus.UCSC.mm10.knownGene)
 
 option_list = list(
   make_option(c("-m", "--gene_matrix"), type="character", default=NULL, help="diann gene matrix output file name", metavar="character"),
-  make_option(c("-f", "--fc_col"), type="character", default=NULL, help="Sepcifify a column header with logfold to perform gsea", metavar="character"),
+  make_option(c("-c", "--comp_label"), type="character", default=NULL, help="Sepcifify a column header with logfold", metavar="character"),
   make_option(c("-o", "--out"), type="character", default=NULL, help="output dir", metavar="character"),
   make_option(c("-s", "--specie"), type="character", default=NULL, help="Species: Hs, Mm", metavar="character"),
   make_option(c("-g", "--geneset"), type="character", default=NULL, help="Gene set: kegg, go, MSigDB", metavar="character")
@@ -32,10 +32,11 @@ if (is.null(opt$gene_matrix)){
 }
 
 f <- opt$gene_matrix
-fc_col <- opt$fc_col
+lbl <- opt$comp_label
 o <- opt$out
 sp <- opt$specie
 gs <- opt$geneset
+fc_col <- paste(lbl,"_diff",sep = "")
 
 # test
 # f <- "/storage/Documents/service/externe/sheela/20240729_mouse_ms_lysM/results_rmoutliers/report.pg_matrix.proteoptypic.dge.tsv"
@@ -158,12 +159,12 @@ if (gs == "kegg") {
 
 
 ## draw GSEA plot for a specific gene set
-n <- paste(fc_col,gs,sep='_')
-t <- list.dirs(path = o, recursive = FALSE)
-t <- grep(n, t, value = TRUE)
-out <- paste(o,n,sep='/')
+# n <- paste(lbl,gs,sep='_')
+# t <- list.dirs(path = o, recursive = FALSE)
+# t <- grep(n, t, value = TRUE)
+out <- paste(o,lbl,gs,sep='/')
 if (!dir.exists(out)){
-  dir.create(out, showWarnings = TRUE)
+  dir.create(out, showWarnings = TRUE, recursive = TRUE)
 }
 print("Outputting GSEA")
 if (length(topGS) > 0) {
