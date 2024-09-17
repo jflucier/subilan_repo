@@ -38,14 +38,14 @@ sp <- opt$specie
 gs <- opt$geneset
 
 # test
-f <- "/storage/Documents/service/externe/sheela/20240729_mouse_ms_lysM/results_rmoutliers/report.pg_matrix.proteoptypic.dge.tsv"
-gs <- "kegg"
-# gs <- "go"
-# gs <- "MSigDB"
-# o <- paste("/storage/Documents/service/externe/ilan/20240702_mouse_ms_organoid/gsea/",gs,sep='')
-o <- "/storage/Documents/service/externe/sheela/20240729_mouse_ms_lysM/results_rmoutliers/gsea"
-sp <- "Mm"
-fc_col <- "X15KO_vs_WT_diff"
+# f <- "/storage/Documents/service/externe/sheela/20240729_mouse_ms_lysM/results_rmoutliers/report.pg_matrix.proteoptypic.dge.tsv"
+# gs <- "kegg"
+# # gs <- "go"
+# # gs <- "MSigDB"
+# # o <- paste("/storage/Documents/service/externe/ilan/20240702_mouse_ms_organoid/gsea/",gs,sep='')
+# o <- "/storage/Documents/service/externe/sheela/20240729_mouse_ms_lysM/results_rmoutliers/gsea"
+# sp <- "Mm"
+# fc_col <- "X15KO_vs_WT_diff"
 
 g_list= read.csv(
   f, 
