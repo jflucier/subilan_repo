@@ -28,10 +28,10 @@ library("optparse")
 # }
 # ' report.pg_matrix.tsv > report.pg_matrix.proteoptypic.tsv
 
-bp <- "/storage/Documents/service/externe/sheela/20240729_mouse_ms_lysM"
-out_bp <- paste0(bp,"/fragpipe")
-in_diann <- "/storage/Documents/service/externe/sheela/20240729_mouse_ms_lysM/results/report.pg_matrix.proteoptypic.tsv"
-in_design <- "/storage/Documents/service/externe/sheela/20240729_mouse_ms_lysM/experiment_annotation.tsv"
+# bp <- "/storage/Documents/service/externe/sheela/20240729_mouse_ms_lysM"
+# out_bp <- paste0(bp,"/fragpipe")
+# in_diann <- "/storage/Documents/service/externe/sheela/20240729_mouse_ms_lysM/results/report.pg_matrix.proteoptypic.tsv"
+# in_design <- "/storage/Documents/service/externe/sheela/20240729_mouse_ms_lysM/experiment_annotation.tsv"
 
 option_list = list(
   make_option(c("-o", "--out"), type="character", default=NULL, help="output dir", metavar="character"),
