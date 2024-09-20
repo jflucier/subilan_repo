@@ -28,10 +28,10 @@ library("optparse")
 # }
 # ' report.pg_matrix.tsv > report.pg_matrix.proteoptypic.tsv
 
-# bp <- "/storage/Documents/service/externe/sheela/20240729_mouse_ms_lysM"
-# out_bp <- paste0(bp,"/fragpipe")
-# in_diann <- "/storage/Documents/service/externe/sheela/20240729_mouse_ms_lysM/results/report.pg_matrix.proteoptypic.tsv"
-# in_design <- "/storage/Documents/service/externe/sheela/20240729_mouse_ms_lysM/experiment_annotation.tsv"
+bp <- "/storage/Documents/service/externe/sheela/20240729_mouse_ms_lysM"
+out_bp <- paste0(bp,"/fragpipe")
+in_diann <- "/storage/Documents/service/externe/sheela/20240729_mouse_ms_lysM/results/report.pg_matrix.proteoptypic.tsv"
+in_design <- "/storage/Documents/service/externe/sheela/20240729_mouse_ms_lysM/experiment_annotation.tsv"
 
 option_list = list(
   make_option(c("-o", "--out"), type="character", default=NULL, help="output dir", metavar="character"),
@@ -88,13 +88,25 @@ pdf(
 de_result <- test_limma(ccrcc, type = "all")
 # add_rejections marks significant proteins based on defined cutoffs. Deafult is <= 0.05 adjusted P value and log2 fold change >= 1
 de_result_updated <- add_rejections(de_result)
-# get_cluster_heatmap(de_result_updated, type="centered", clustering_distance="euclidean", plot=FALSE)
-plot_volcano(de_result_updated, "X15KO_vs_WT", name_col = "Genes")
-plot_volcano(de_result_updated, "LysM_minus_vs_WT", name_col = "Genes")
-plot_volcano(de_result_updated, "LysM_plus_vs_WT", name_col = "Genes")
-plot_volcano(de_result_updated, "LysM_minus_vs_LysM_plus", name_col = "Genes")
-plot_volcano(de_result_updated, "X15KO_vs_LysM_minus", name_col = "Genes")
-plot_volcano(de_result_updated, "X15KO_vs_LysM_plus", name_col = "Genes")
+
+group_list <- unique(de_result@colData@listData[["condition"]])
+for (value1 in group_list) {
+  #print(value1)
+  for (value2 in group_list) {
+    v_diff <- paste0(value1,"_vs_",value2,"_diff")
+    if(!is.null(de_result_updated@elementMetadata@listData[[v_diff]])){
+      lbl <- paste0(value1,"_vs_",value2)
+      print(paste0("plotting volcano for: ", lbl))
+      plot_volcano(de_result_updated, lbl, name_col = "Genes")
+    }
+  }
+}
+# plot_volcano(de_result_updated, "X15KO_vs_WT", name_col = "Genes")
+# plot_volcano(de_result_updated, "LysM_minus_vs_WT", name_col = "Genes")
+# plot_volcano(de_result_updated, "LysM_plus_vs_WT", name_col = "Genes")
+# plot_volcano(de_result_updated, "LysM_minus_vs_LysM_plus", name_col = "Genes")
+# plot_volcano(de_result_updated, "X15KO_vs_LysM_minus", name_col = "Genes")
+# plot_volcano(de_result_updated, "X15KO_vs_LysM_plus", name_col = "Genes")
 dev.off()
 
 x <- de_result_updated@elementMetadata@listData
@@ -112,12 +124,25 @@ pdf(
 de_result <- test_limma(imputed, type = "all")
 # add_rejections marks significant proteins based on defined cutoffs. Deafult is <= 0.05 adjusted P value and log2 fold change >= 1
 de_result_updated <- add_rejections(de_result)
-plot_volcano(de_result_updated, "X15KO_vs_WT", name_col = "Genes")
-plot_volcano(de_result_updated, "LysM_minus_vs_WT", name_col = "Genes")
-plot_volcano(de_result_updated, "LysM_plus_vs_WT", name_col = "Genes")
-plot_volcano(de_result_updated, "LysM_minus_vs_LysM_plus", name_col = "Genes")
-plot_volcano(de_result_updated, "X15KO_vs_LysM_minus", name_col = "Genes")
-plot_volcano(de_result_updated, "X15KO_vs_LysM_plus", name_col = "Genes")
+group_list <- unique(de_result@colData@listData[["condition"]])
+for (value1 in group_list) {
+  #print(value1)
+  for (value2 in group_list) {
+    v_diff <- paste0(value1,"_vs_",value2,"_diff")
+    if(!is.null(de_result_updated@elementMetadata@listData[[v_diff]])){
+      lbl <- paste0(value1,"_vs_",value2)
+      print(paste0("plotting volcano for: ", lbl))
+      plot_volcano(de_result_updated, lbl, name_col = "Genes")
+    }
+  }
+}
+# 
+# plot_volcano(de_result_updated, "X15KO_vs_WT", name_col = "Genes")
+# plot_volcano(de_result_updated, "LysM_minus_vs_WT", name_col = "Genes")
+# plot_volcano(de_result_updated, "LysM_plus_vs_WT", name_col = "Genes")
+# plot_volcano(de_result_updated, "LysM_minus_vs_LysM_plus", name_col = "Genes")
+# plot_volcano(de_result_updated, "X15KO_vs_LysM_minus", name_col = "Genes")
+# plot_volcano(de_result_updated, "X15KO_vs_LysM_plus", name_col = "Genes")
 dev.off()
 
 x <- de_result_updated@elementMetadata@listData
