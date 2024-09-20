@@ -97,16 +97,11 @@ for (value1 in group_list) {
     if(!is.null(de_result_updated@elementMetadata@listData[[v_diff]])){
       lbl <- paste0(value1,"_vs_",value2)
       print(paste0("plotting volcano for: ", lbl))
-      plot_volcano(de_result_updated, lbl, name_col = "Genes")
+      p <- plot_volcano(de_result_updated, lbl, name_col = "Genes")
+      print(p)
     }
   }
 }
-# plot_volcano(de_result_updated, "X15KO_vs_WT", name_col = "Genes")
-# plot_volcano(de_result_updated, "LysM_minus_vs_WT", name_col = "Genes")
-# plot_volcano(de_result_updated, "LysM_plus_vs_WT", name_col = "Genes")
-# plot_volcano(de_result_updated, "LysM_minus_vs_LysM_plus", name_col = "Genes")
-# plot_volcano(de_result_updated, "X15KO_vs_LysM_minus", name_col = "Genes")
-# plot_volcano(de_result_updated, "X15KO_vs_LysM_plus", name_col = "Genes")
 dev.off()
 
 x <- de_result_updated@elementMetadata@listData
@@ -132,17 +127,11 @@ for (value1 in group_list) {
     if(!is.null(de_result_updated@elementMetadata@listData[[v_diff]])){
       lbl <- paste0(value1,"_vs_",value2)
       print(paste0("plotting volcano for: ", lbl))
-      plot_volcano(de_result_updated, lbl, name_col = "Genes")
+      p <- plot_volcano(de_result_updated, lbl, name_col = "Genes")
+      print(p)
     }
   }
 }
-# 
-# plot_volcano(de_result_updated, "X15KO_vs_WT", name_col = "Genes")
-# plot_volcano(de_result_updated, "LysM_minus_vs_WT", name_col = "Genes")
-# plot_volcano(de_result_updated, "LysM_plus_vs_WT", name_col = "Genes")
-# plot_volcano(de_result_updated, "LysM_minus_vs_LysM_plus", name_col = "Genes")
-# plot_volcano(de_result_updated, "X15KO_vs_LysM_minus", name_col = "Genes")
-# plot_volcano(de_result_updated, "X15KO_vs_LysM_plus", name_col = "Genes")
 dev.off()
 
 x <- de_result_updated@elementMetadata@listData
