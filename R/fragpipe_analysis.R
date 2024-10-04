@@ -11,7 +11,7 @@
 # renv::install("bioc::cmapR", prompt=FALSE)
 # renv::install("bioc::ConsensusClusterPlus", prompt=FALSE)
 # renv::install("Nesvilab/FragPipeAnalystR", prompt=FALSE)
-renv::install("bioc::SEtools", prompt=FALSE)
+# renv::install("bioc::SEtools", prompt=FALSE)
 # 
 # # optional
 # renv::install("nicolerg/ssGSEA2", prompt=FALSE)
