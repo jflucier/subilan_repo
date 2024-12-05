@@ -1,0 +1,83 @@
+# to build: singularity build --force --fakeroot katmap-420c462e.sif katmap-420c462e.def
+
+BootStrap: docker
+From: ubuntu:22.04
+%setup
+%environment
+export PATH=/micromaba/envs/katmap_env/bin/:$PATH
+export MAMBA_ROOT_PREFIX=/micromamba
+%post
+    apt-get update && apt-get -y upgrade
+    ln -fs /usr/share/zoneinfo/America/New_York /etc/localtime
+    export DEBIAN_FRONTEND=noninteractive
+    apt-get -yq install libmkl-rt
+    # removed roary
+    apt-get -y install \
+    build-essential \
+    libblas-dev \
+    liblapack-dev \
+    libgsl-dev \
+    gfortran \
+    curl \
+    wget \
+    bzip2 \
+    ca-certificates \
+    libarchive13 \
+    libglib2.0-0 \
+    libxext6 \
+    libsm6 \
+    libxrender1 \
+    git \
+    tzdata \
+    python3 \
+    python3-pip
+    #openjdk-17-jre \
+    #cpanminus \
+    #perl \
+    #zlib1g \
+    #zlib1g-dev \
+    #r-base \
+    #r-recommended \
+    #r-cran-reshape2 \
+    #r-cran-ggplot2 \
+
+
+# mamba install and setup
+cd /
+curl -Ls https://micro.mamba.pm/api/micromamba/linux-64/latest | tar -xvj bin/micromamba
+export MAMBA_ROOT_PREFIX=/micromamba
+eval "$(micromamba shell hook -s posix )"
+echo 'eval "$(/bin/micromamba shell hook -s posix)"' >> $SINGULARITY_ENVIRONMENT
+echo "micromamba activate katmap_env" >> $SINGULARITY_ENVIRONMENT
+cd ..
+
+
+# install katmap
+cd /
+git clone https://gitlab.com/LaptopBiologist/katmap.git
+cd katmap
+git checkout 420c462e
+micromamba env create -f katmap.yaml -n katmap_env python=3.10
+micromamba activate katmap_env
+pip install -e .
+cd ..
+
+# install spliceformats
+cd /
+git clone https://gitlab.com/LaptopBiologist/spliceformats.git
+cd spliceformats
+pip install -e .
+cd ..
+
+# install amppl
+cd /
+git clone https://gitlab.com/LaptopBiologist/amppl.git
+cd amppl
+pip install -e .
+cd ..
+
+# install rmats
+micromamba install -c conda-forge python_abi
+micromamba install -c bioconda rmats=4.3.0
+
+micromamba deactivate

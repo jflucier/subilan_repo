@@ -1,0 +1,70 @@
+```{r}
+
+library(ggbiplot)
+library(devtools)
+library("RColorBrewer")
+library(corrplot)
+library(dplyr)
+
+# if (!require("BiocManager", quietly = TRUE))
+#     install.packages("BiocManager")
+# 
+# BiocManager::install("ComplexHeatmap")
+
+library("ComplexHeatmap")
+
+# install.packages('gplots')
+library("gplots")
+
+all_files <- c(
+  "/storage/Documents/service/externe/lcfortier/20241010_cneonatale/heatmap/20241010_cneonatale_prophage_vs_strains.presence.tsv"
+)
+
+for (f in all_files) {
+  message("running:",f)
+  all_data= read.csv(
+    f, 
+    header = TRUE,
+    sep="\t", 
+    row.names=1, 
+    na.strings = "", 
+    stringsAsFactors=FALSE
+  )
+  d <- data.matrix(t(all_data))
+  
+  hr <- hclust(dist(d, method="manhattan"), method="complete")
+  
+  out=paste(f,".heatmap.png",sep='')
+  png(out,res=250,width=2500,height=2500)
+  heatmap.2(
+    d,
+    trace="none",
+    col=c("#FFFFFF", "#000000"),
+    scale="none",
+    #RowSideColor=CLASS,
+    dendrogram="both",
+    cexCol=0.4,
+    cexRow=0.4,
+    margins=c(15,15)
+  )
+  dev.off()
+  
+  out=paste(f,".heatmap.svg",sep='')
+  svg(out)
+  heatmap.2(
+    d,
+    trace="none",
+    col=c("#FFFFFF", "#000000"),
+    scale="none",
+    #RowSideColor=CLASS,
+    dendrogram="both",
+    cexCol=0.4,
+    cexRow=0.4,
+    margins=c(15,15)
+  )
+  dev.off()
+}
+
+
+
+
