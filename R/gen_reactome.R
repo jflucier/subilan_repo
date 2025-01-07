@@ -135,7 +135,7 @@ sp <- opt$specie
 print(paste("##### Running",gs_source, sep = " "))
 out <- paste(b_out,comp_label,sep='/')
 if (!dir.exists(out)){
-  dir.create(out, showWarnings = TRUE, recursive = TRUE)
+  dir.create(out, recursive = TRUE)
 }
 o <- paste(out,gs_source,sep='/')
 gen_reactome(
