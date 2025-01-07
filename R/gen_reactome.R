@@ -3,7 +3,7 @@ library(dplyr)
 library(tidyverse)
 library("optparse")
 
-gen_reactome <- function(f, o, gene_col, fc_col, pval_col, gs_source, sp_lbl, pin) {
+gen_reactome <- function(f, o, gene_col, fc_col, pval_col, gs_source, sp_lbl) {
   print("reading gene list")
   g_list= read.csv(
     f, 
@@ -49,50 +49,54 @@ gen_reactome <- function(f, o, gene_col, fc_col, pval_col, gs_source, sp_lbl, pi
   }
   
   dir.create(o, showWarnings = TRUE, recursive = TRUE)
-  d <- paste(o,pin,sep='/')
-  print(paste("running run_pathfindR using geneset ", gs_source, " and pin ", pin, sep= ""))
-  output_df <- run_pathfindR(
-    g_list,
-    output_dir = d,
-    custom_genes = gsets_list$gene_sets,
-    custom_descriptions = gsets_list$descriptions,
-    min_gset_size = 10,
-    max_gset_size = 300,
-    n_processes = 8,
-    pin_name_path = pin
-  )
-  print("clustering terms...")
-  output_df_clustered <- cluster_enriched_terms(output_df, plot_dend = FALSE, plot_clusters_graph = FALSE)
-  print("outputting enrichment chart in TSV")
-  out=paste(d,"enrichment_chart.tsv",sep='/')
-  write.table(output_df_clustered, file = out, sep = "\t")
   
-  # plotting only selected clusters for better visualization
-  selected_clusters <- subset(output_df_clustered[output_df_clustered$Status == "Representative", ], Cluster %in% 1:10)
-  
-  # output png enrichment chart
-  print("outputting enrichment chart in png")
-  out=paste(d,"enrichment_chart.png",sep='/')
-  png(
-    filename = out,
-    res = 250,
-    width = 8,
-    height = 4,
-    units = "in"
-  )
-  plot(enrichment_chart(selected_clusters, plot_by_cluster = TRUE))
-  dev.off()
-  
-  # output png enrichment chart
-  print("outputting enrichment chart in svg")
-  out=paste(d,"enrichment_chart.svg",sep='/')
-  svg(
-    filename = out,
-    width = 8,
-    height = 4
-  )
-  plot(enrichment_chart(selected_clusters, plot_by_cluster = TRUE))
-  dev.off()
+  pins <- list("Biogrid", "STRING", "GeneMania", "IntAct", "KEGG", "mmu_STRING")
+  for (pin in pins) {
+    d <- paste(o,pin,sep='/')
+    print(paste("running run_pathfindR using geneset ", gs_source, " and pin ", pin, sep= ""))
+    output_df <- run_pathfindR(
+      g_list,
+      output_dir = d,
+      custom_genes = gsets_list$gene_sets,
+      custom_descriptions = gsets_list$descriptions,
+      min_gset_size = 10,
+      max_gset_size = 300,
+      n_processes = 8,
+      pin_name_path = pin
+    )
+    print("clustering terms...")
+    output_df_clustered <- cluster_enriched_terms(output_df, plot_dend = FALSE, plot_clusters_graph = FALSE)
+    print("outputting enrichment chart in TSV")
+    out=paste(d,"enrichment_chart.tsv",sep='/')
+    write.table(output_df_clustered, file = out, sep = "\t")
+    
+    # plotting only selected clusters for better visualization
+    selected_clusters <- subset(output_df_clustered[output_df_clustered$Status == "Representative", ], Cluster %in% 1:10)
+    
+    # output png enrichment chart
+    print("outputting enrichment chart in png")
+    out=paste(d,"enrichment_chart.png",sep='/')
+    png(
+      filename = out,
+      res = 250,
+      width = 8,
+      height = 4,
+      units = "in"
+    )
+    plot(enrichment_chart(selected_clusters, plot_by_cluster = TRUE))
+    dev.off()
+    
+    # output png enrichment chart
+    print("outputting enrichment chart in svg")
+    out=paste(d,"enrichment_chart.svg",sep='/')
+    svg(
+      filename = out,
+      width = 8,
+      height = 4
+    )
+    plot(enrichment_chart(selected_clusters, plot_by_cluster = TRUE))
+    dev.off()
+  }
 }
 
 # f <- "/storage/Documents/service/externe/sheela/20240729_mouse_ms_lysM/results_rmoutliers/report.pg_matrix.proteoptypic.dge.modif.tsv"
@@ -109,8 +113,7 @@ option_list = list(
   make_option(c("-s", "--specie"), type="character", default=NULL, help="Species: human, mouse", metavar="character"),
   make_option(c("-g", "--gene_col"), type="character", default=NULL, help="Gene header column", metavar="character"),
   make_option(c("-c", "--comp_label"), type="character", default=NULL, help="Sepcifify a column header with logfold", metavar="character"),
-  make_option(c("--gene_source"), type="character", default=NULL, help="Gene source: KEGG, Reactome, MSigDB", metavar="character"),
-  make_option(c("--pin"), type="character", default=NULL, help="PIN: Biogrid, STRING, IntAct, KEGG, mmu_STRING", metavar="character")
+  make_option(c("--gene_source"), type="character", default=NULL, help="Gene source: KEGG, Reactome, MSigDB", metavar="character")
 );
 
 opt_parser = OptionParser(option_list=option_list);
@@ -127,7 +130,6 @@ gene_col <- opt$gene_col
 comp_label <- opt$comp_label
 gs_source <- opt$gene_source
 sp <- opt$specie
-pin <- opt$pin
 
 print(paste("##### Running",gs_source, sep = " "))
 out <- paste(b_out,comp_label,sep='/')
@@ -142,6 +144,5 @@ gen_reactome(
   paste(comp_label,"_diff",sep=''), 
   paste(comp_label,"_p.adj",sep=''),
   gs_source, 
-  sp, 
-  pin
+  sp
 )
