@@ -48,7 +48,9 @@ gen_reactome <- function(f, o, gene_col, fc_col, pval_col, gs_source, sp_lbl) {
     )
   }
   
-  dir.create(o, showWarnings = TRUE, recursive = TRUE)
+  if (!dir.exists(o)){
+    dir.create(o, showWarnings = TRUE, recursive = TRUE)
+  }
   
   pins <- list("Biogrid", "STRING", "GeneMania", "IntAct", "KEGG", "mmu_STRING")
   for (pin in pins) {
@@ -135,7 +137,7 @@ sp <- opt$specie
 print(paste("##### Running",gs_source, sep = " "))
 out <- paste(b_out,comp_label,sep='/')
 if (!dir.exists(out)){
-  dir.create(out, recursive = TRUE)
+  dir.create(out, showWarnings = TRUE, recursive = TRUE)
 }
 o <- paste(out,gs_source,sep='/')
 gen_reactome(
