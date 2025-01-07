@@ -69,7 +69,7 @@ gen_reactome <- function(f, o, gene_col, fc_col, pval_col, gs_source, sp_lbl) {
     )
     print("clustering terms...")
     output_df_clustered <- try(cluster_enriched_terms(output_df, plot_dend = FALSE, plot_clusters_graph = FALSE))
-    if(inherits(res, "try-error")){
+    if(inherits(output_df_clustered, "try-error")){
       print("------------------------- cluster_enriched_terms error")
       next
     }
