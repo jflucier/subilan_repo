@@ -48,6 +48,11 @@ out_bp <- opt$out
 in_diann <- opt$matrix
 in_design <- opt$design
 
+# out_bp <- "/storage/Documents/service/externe/sheela/20250107_mice_colon_take2/fragpipev1.0.1"
+# in_diann <- "/storage/Documents/service/externe/sheela/20250107_mice_colon_take2/report.pg_matrix.tsv"
+# in_design <- "/storage/Documents/service/externe/sheela/20250107_mice_colon_take2/experiment_annotation.tsv"
+
+
 if (!dir.exists(out_bp)){
   dir.create(out_bp, showWarnings = TRUE)
 }
