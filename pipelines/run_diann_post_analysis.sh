@@ -103,7 +103,7 @@ Rscript ${EXE_PATH}/../R/fragpipe_analysis.R \
 # extract columns based on comparisons
 echo "generate fragpipe filtered results based on comparisons to perform"
 comps_regex=$(echo "$comps" | sed -r 's/[ ]+/\|/g')
-awk -v get="Genes|First.Protein.Description|$comps_regex" '
+awk -v get="Protein.Group|Genes|First.Protein.Description|$comps_regex" '
 BEGIN{
   FS=OFS="\t"
 }
