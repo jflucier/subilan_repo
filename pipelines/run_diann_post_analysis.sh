@@ -81,22 +81,23 @@ fi
 echo "loading modules"
 module load StdEnv/2023 r/4.4.0 netcdf/4.9.2 gdal/3.9.1
 
+# not needed anymore since FragPipeAnalystR v 1.0.1
 # filter protein groups to kepp proteotypic protein groups only
-echo "generating proteoptypic protein group matrix"
-perl -ne '
-chomp($_);
-my @t = split("\t",$_);
-my @prot_ident = split(";",$t[0]);
-if(scalar(@prot_ident) == 1){
-  print $_ . "\n";
-}
-' ${in}/report.pg_matrix.tsv > ${in}/report.pg_matrix.proteoptypic.tsv
+#echo "generating proteoptypic protein group matrix"
+#perl -ne '
+#chomp($_);
+#my @t = split("\t",$_);
+#my @prot_ident = split(";",$t[0]);
+#if(scalar(@prot_ident) == 1){
+#  print $_ . "\n";
+#}
+#' ${in}/report.pg_matrix.tsv > ${in}/report.pg_matrix.proteoptypic.tsv
 
 # run fragpipe
 echo "running fragpipe"
 
 Rscript ${EXE_PATH}/../R/fragpipe_analysis.R \
---matrix ${in}/report.pg_matrix.proteoptypic.tsv \
+--matrix ${in}/report.pg_matrix.tsv \
 --out ${basepath}/fragpipe \
 --design ${exp}
 

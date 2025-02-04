@@ -1,7 +1,7 @@
-library(pathfindR)
-library(dplyr)
-library(tidyverse)
-library("optparse")
+suppressPackageStartupMessages(library(pathfindR))
+suppressPackageStartupMessages(library(dplyr))
+suppressPackageStartupMessages(library(tidyverse))
+suppressPackageStartupMessages(library("optparse"))
 
 gen_reactome <- function(f, o, gene_col, fc_col, pval_col, gs_source, sp_lbl) {
   print("reading gene list")

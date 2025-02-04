@@ -1,13 +1,13 @@
 #!/usr/bin/env Rscript
 
-library("optparse")
-library(HTSanalyzeR2)
-library(org.Mm.eg.db)
-library(KEGGREST)
-library(igraph)
-library(ggplotify)
-library(GO.db)
-library(limma)
+suppressPackageStartupMessages(library("optparse"))
+suppressPackageStartupMessages(library(HTSanalyzeR2))
+suppressPackageStartupMessages(library(org.Mm.eg.db))
+suppressPackageStartupMessages(library(KEGGREST))
+suppressPackageStartupMessages(library(igraph))
+suppressPackageStartupMessages(library(ggplotify))
+suppressPackageStartupMessages(library(GO.db))
+suppressPackageStartupMessages(library(limma))
 
 # if (!require("BiocManager", quietly = TRUE))
 #   install.packages("BiocManager")

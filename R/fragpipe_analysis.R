@@ -16,9 +16,9 @@
 # # optional
 # renv::install("nicolerg/ssGSEA2", prompt=FALSE)
 
-library(FragPipeAnalystR)
-library("optparse")
-library(SEtools)
+suppressPackageStartupMessages(library(FragPipeAnalystR))
+suppressPackageStartupMessages(library("optparse"))
+suppressPackageStartupMessages(library(SEtools))
 
 ### first filter report.pg_matrix.tsv to select proteotypic proteins groups ###
 # perl -ne '

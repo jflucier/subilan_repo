@@ -671,7 +671,7 @@ def run_annotation(adata, outpath, resolutions, markers):
             sc.pl.dotplot(
                 adata,
                 marker_genes,
-                groupby=f"leiden_{res}",
+                groupby=f"clustifyr_cell_label_{res}",
                 show=False
             )
             pdf.savefig(bbox_inches="tight")
@@ -679,7 +679,7 @@ def run_annotation(adata, outpath, resolutions, markers):
             sc.pl.stacked_violin(
                 adata,
                 marker_genes,
-                groupby=f"leiden_{res}",
+                groupby=f"clustifyr_cell_label_{res}",
                 cmap="RdBu_r",
                 show=False
             )
@@ -698,7 +698,7 @@ def run_annotation(adata, outpath, resolutions, markers):
             sc.pl.matrixplot(
                 adata,
                 marker_genes,
-                groupby=f"leiden_{res}",
+                groupby=f"clustifyr_cell_label_{res}",
                 colorbar_title="mean z-score",
                 layer="scaled",
                 vmin=-2,
@@ -826,8 +826,8 @@ def main(samples, outpath, resolutions, markers):
     # # adata = sc.read_h5ad(os.path.join(outpath, "adata_dimensionality_reduction.h5ad"))
     # adata = run_clustering(adata, outpath, resolutions)
 
-    # # adata = sc.read_h5ad(os.path.join(outpath, "adata_clustering.h5ad"))
-    # adata = run_annotation(adata, outpath, resolutions, markers)
+    adata = sc.read_h5ad(os.path.join(outpath, "adata_clustering.h5ad"))
+    adata = run_annotation(adata, outpath, resolutions, markers)
 
     adata = sc.read_h5ad(os.path.join(outpath, "adata_annotation.h5ad"))
     adata = run_dge(adata, outpath, resolutions)
