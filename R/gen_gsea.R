@@ -9,12 +9,6 @@ suppressPackageStartupMessages(library(ggplotify))
 suppressPackageStartupMessages(library(GO.db))
 suppressPackageStartupMessages(library(limma))
 
-# if (!require("BiocManager", quietly = TRUE))
-#   install.packages("BiocManager")
-# BiocManager::install("TxDb.Mmusculus.UCSC.mm10.knownGene")
-
-library(TxDb.Mmusculus.UCSC.mm10.knownGene)
-
 option_list = list(
   make_option(c("-m", "--gene_matrix"), type="character", default=NULL, help="diann gene matrix output file name", metavar="character"),
   make_option(c("-c", "--comp_label"), type="character", default="", help="Specify comparison label. Used to set pval_col and fc_col if not provided (i.e. <comp_label>_diff)", metavar="character"),
@@ -39,36 +33,66 @@ sp <- opt$specie
 gs <- opt$geneset
 fc_col <- opt$fc_col
 
+# test
+# f <- "/storage/Documents/service/externe/sheela/20240606_LC_exercice_somalogic/results.take3/EPostvsEPre.stats.tsv"
+# gs <- "kegg"
+# # gs <- "go"
+# # gs <- "MSigDB"
+# # o <- paste("/storage/Documents/service/externe/ilan/20240702_mouse_ms_organoid/gsea/",gs,sep='')
+# o <- "/storage/Documents/service/externe/sheela/20240606_LC_exercice_somalogic/results.take3/gsea"
+# sp <- "Hs"
+# fc_col <- "log2fc"
+# lbl <- "EPostvsEPre"
+
 if (fc_col == ''){
     fc_col <- paste(lbl,"_diff",sep = "")
+}
+
+if (sp == 'Mm'){
+  library(TxDb.Mmusculus.UCSC.mm10.knownGene)
+} else if (sp == 'Hs'){
+  library(TxDb.Hsapiens.UCSC.hg38.knownGene)
+} else {
+  message (paste0("Unrecongnised sp provided. Supported species are: Hs and Mm"))
+  quit(1)
 }
 
 out <- paste(
     o,
     lbl,
+    gs,
     sep='/'
 )
 if (!dir.exists(out)){
   dir.create(out, showWarnings = TRUE, recursive = TRUE)
 }
 
-# test
-# f <- "/storage/Documents/service/externe/sheela/20240729_mouse_ms_lysM/results_rmoutliers/report.pg_matrix.proteoptypic.dge.tsv"
-# gs <- "kegg"
-# # gs <- "go"
-# # gs <- "MSigDB"
-# # o <- paste("/storage/Documents/service/externe/ilan/20240702_mouse_ms_organoid/gsea/",gs,sep='')
-# o <- "/storage/Documents/service/externe/sheela/20240729_mouse_ms_lysM/results_rmoutliers/gsea"
-# sp <- "Mm"
-# fc_col <- "X15KO_vs_WT_diff"
-
-g_list= read.csv(
+g_list = read.csv(
   f, 
   header = TRUE,
   sep="\t",
-  row.names = 2,
   stringsAsFactors=FALSE
 )
+
+# Function to find the name of specific column labels
+find_column_name_and_index <- function(df, labels) {
+  for (label in labels) {
+    index <- which(colnames(df) == label)
+    if (length(index) > 0) {
+      return(list(name = label, index = index))
+    }
+  }
+  return(NULL)
+}
+
+# Define the labels to search for
+labels_to_find <- c("UniProt", "Protein.Group")
+# Get the name of the column
+column_info <- find_column_name_and_index(g_list, labels_to_find)
+
+# Check the column information
+print(paste("column_name is:", column_info$name))
+print(paste("column_index is:", column_info$index))
 
 ## prepare input for analysis
 if (gs == "kegg") {
@@ -89,7 +113,7 @@ if (gs == "kegg") {
 }
 
 phenotype <- as.vector(g_list[[fc_col]])
-names(phenotype) <- rownames(g_list)
+names(phenotype) <- as.vector(g_list[[column_info$name]])
 
 gsca <- GSCA(
   listOfGeneSetCollections=ListGSC, 
@@ -170,8 +194,6 @@ if (gs == "kegg") {
   d <- gsca3@result[["GSEA.results"]][["MSig_C2"]]
 }
 
-
-
 ## draw GSEA plot for a specific gene set
 print("Outputting GSEA")
 if (length(topGS) > 0) {
@@ -187,10 +209,6 @@ write.table(
 )
 
 print("done!")
-
-# out <- paste(o,n,sep='/')
-# report(gsca3,reportDir = out, gseaPlot = TRUE)
-# summarize(gsca3)
 
 
 
