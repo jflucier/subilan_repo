@@ -1,11 +1,11 @@
 # install.packages("SomaDataIO")
-# 
-# if (!requireNamespace("BiocManager", quietly = TRUE)) {
-#   install.packages("BiocManager")
-# }
-# BiocManager::install("Biobase")
-# 
-# install.packages("tidyverse")
+#
+if (!requireNamespace("BiocManager", quietly = TRUE)) {
+  install.packages("BiocManager")
+}
+BiocManager::install("Biobase")
+install.packages("tidyverse")
+
 suppressPackageStartupMessages(library("optparse"))
 suppressPackageStartupMessages(library("tidyverse"))
 suppressPackageStartupMessages(library("SomaDataIO"))

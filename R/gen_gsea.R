@@ -17,9 +17,10 @@ library(TxDb.Mmusculus.UCSC.mm10.knownGene)
 
 option_list = list(
   make_option(c("-m", "--gene_matrix"), type="character", default=NULL, help="diann gene matrix output file name", metavar="character"),
-  make_option(c("-c", "--comp_label"), type="character", default=NULL, help="Sepcifify a column header with logfold", metavar="character"),
+  make_option(c("-c", "--comp_label"), type="character", default="", help="Specify comparison label. Used to set pval_col and fc_col if not provided (i.e. <comp_label>_diff)", metavar="character"),
   make_option(c("-o", "--out"), type="character", default=NULL, help="output dir", metavar="character"),
   make_option(c("-s", "--specie"), type="character", default=NULL, help="Species: Hs, Mm", metavar="character"),
+  make_option(c("-f", "--fc_col"), type="character", default="", help="Sepcifify a column header with log2fc", metavar="character"),
   make_option(c("-g", "--geneset"), type="character", default=NULL, help="Gene set: kegg, go, MSigDB", metavar="character")
 );
 
@@ -36,7 +37,20 @@ lbl <- opt$comp_label
 o <- opt$out
 sp <- opt$specie
 gs <- opt$geneset
-fc_col <- paste(lbl,"_diff",sep = "")
+fc_col <- opt$fc_col
+
+if (fc_col == ''){
+    fc_col <- paste(lbl,"_diff",sep = "")
+}
+
+out <- paste(
+    b_out,
+    comp_label,
+    sep='/'
+)
+if (!dir.exists(out)){
+  dir.create(out, showWarnings = TRUE, recursive = TRUE)
+}
 
 # test
 # f <- "/storage/Documents/service/externe/sheela/20240729_mouse_ms_lysM/results_rmoutliers/report.pg_matrix.proteoptypic.dge.tsv"
@@ -159,13 +173,6 @@ if (gs == "kegg") {
 
 
 ## draw GSEA plot for a specific gene set
-# n <- paste(lbl,gs,sep='_')
-# t <- list.dirs(path = o, recursive = FALSE)
-# t <- grep(n, t, value = TRUE)
-out <- paste(o,lbl,gs,sep='/')
-if (!dir.exists(out)){
-  dir.create(out, showWarnings = TRUE, recursive = TRUE)
-}
 print("Outputting GSEA")
 if (length(topGS) > 0) {
   plotGSEA(gsca3, gscs=gscs, filepath=out, allSig=TRUE)
