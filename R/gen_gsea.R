@@ -44,7 +44,7 @@ if (fc_col == ''){
 }
 
 out <- paste(
-    b_out,
+    o,
     comp_label,
     sep='/'
 )
