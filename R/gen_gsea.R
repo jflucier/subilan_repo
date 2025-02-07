@@ -10,7 +10,7 @@ suppressPackageStartupMessages(library(GO.db))
 suppressPackageStartupMessages(library(limma))
 
 option_list = list(
-  make_option(c("-m", "--gene_matrix"), type="character", default=NULL, help="diann gene matrix output file name", metavar="character"),
+  make_option(c("-m", "--gene_matrix"), type="character", default=NULL, help="matrix output file name", metavar="character"),
   make_option(c("-c", "--comp_label"), type="character", default="", help="Specify comparison label. Used to set pval_col and fc_col if not provided (i.e. <comp_label>_diff)", metavar="character"),
   make_option(c("-o", "--out"), type="character", default=NULL, help="output dir", metavar="character"),
   make_option(c("-s", "--specie"), type="character", default=NULL, help="Species: Hs, Mm", metavar="character"),
@@ -32,6 +32,8 @@ o <- opt$out
 sp <- opt$specie
 gs <- opt$geneset
 fc_col <- opt$fc_col
+
+message (paste0("Specie is: ",sp))
 
 # test
 # f <- "/storage/Documents/service/externe/sheela/20240606_LC_exercice_somalogic/results.take3/EPostvsEPre.stats.tsv"
