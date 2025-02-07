@@ -2,7 +2,6 @@
 
 suppressPackageStartupMessages(library("optparse"))
 suppressPackageStartupMessages(library(HTSanalyzeR2))
-suppressPackageStartupMessages(library(org.Mm.eg.db))
 suppressPackageStartupMessages(library(KEGGREST))
 suppressPackageStartupMessages(library(igraph))
 suppressPackageStartupMessages(library(ggplotify))
@@ -51,9 +50,11 @@ if (fc_col == ''){
 }
 
 if (sp == 'Mm'){
-  library(TxDb.Mmusculus.UCSC.mm10.knownGene)
+  suppressPackageStartupMessages(library(TxDb.Mmusculus.UCSC.mm10.knownGene))
+  suppressPackageStartupMessages(library(org.Mm.eg.db))
 } else if (sp == 'Hs'){
-  library(TxDb.Hsapiens.UCSC.hg38.knownGene)
+  suppressPackageStartupMessages(library(TxDb.Hsapiens.UCSC.hg38.knownGene))
+  suppressPackageStartupMessages(library(org.Hs.eg.db))
 } else {
   message (paste0("Unrecongnised sp provided. Supported species are: Hs and Mm"))
   quit(1)
