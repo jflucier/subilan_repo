@@ -119,7 +119,9 @@ option_list = list(
   make_option(c("-o", "--out"), type="character", default=NULL, help="output dir", metavar="character"),
   make_option(c("-s", "--specie"), type="character", default=NULL, help="Species: human, mouse", metavar="character"),
   make_option(c("-g", "--gene_col"), type="character", default=NULL, help="Gene header column", metavar="character"),
-  make_option(c("-c", "--comp_label"), type="character", default=NULL, help="Sepcifify a column header with logfold", metavar="character"),
+  make_option(c("-f", "--fc_col"), type="character", default="", help="Sepcifify a column header with log2fc", metavar="character"),
+  make_option(c("-p", "--pval_col"), type="character", default="", help="Sepcifify a column header with pvals", metavar="character"),
+  make_option(c("-c", "--comp_label"), type="character", default="", help="Specify comparison label. Used to set pval_col and fc_col if not provided (i.e. <comp_label>_diff)", metavar="character"),
   make_option(c("--gene_source"), type="character", default=NULL, help="Gene source: KEGG, Reactome, MSigDB", metavar="character")
 );
 
@@ -134,12 +136,26 @@ if (is.null(opt$input)){
 f <- opt$input
 b_out <- opt$out
 gene_col <- opt$gene_col
-comp_label <- opt$comp_label
 gs_source <- opt$gene_source
 sp <- opt$specie
+fc_col <- opt$fc_col
+pval_col <- opt$pval_col
+comp_label <- opt$comp_label
+
+if (fc_col == ''){
+    fc_col <- paste(comp_label,"_diff",sep='')
+}
+
+if (pval_col == ''){
+    pval_col <- paste(comp_label,"_p.adj",sep='')
+}
 
 print(paste("##### Running",gs_source, sep = " "))
-out <- paste(b_out,comp_label,sep='/')
+out <- paste(
+    b_out,
+    comp_label,
+    sep='/'
+)
 if (!dir.exists(out)){
   dir.create(out, showWarnings = TRUE, recursive = TRUE)
 }
@@ -148,8 +164,8 @@ gen_reactome(
   f, 
   o, 
   gene_col, 
-  paste(comp_label,"_diff",sep=''), 
-  paste(comp_label,"_p.adj",sep=''),
+  fc_col,
+  pval_col,
   gs_source, 
   sp
 )

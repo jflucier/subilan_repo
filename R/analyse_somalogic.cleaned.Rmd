@@ -1,0 +1,401 @@
+```{r}
+
+install.packages("SomaDataIO")
+
+if (!requireNamespace("BiocManager", quietly = TRUE)) {
+  install.packages("BiocManager")
+}
+BiocManager::install("Biobase")
+
+install.packages("tidyverse")
+
+
+```
+```{r}
+
+library("tidyverse")
+library("SomaDataIO")
+
+###### Output raw data reports #####
+
+#adat_f <- "/storage/Documents/service/externe/sheela/20240606_LC_exercice_somalogic/USH-2453319_2024-05-28/SS-2453319_v4.1_EDTAPlasma.hybNorm.medNormInt.plateScale.calibrate.anmlQC.qcCheck.anmlSMP.20240528.adat"
+adat_f <- "/storage/Documents/service/externe/sheela/20240606_LC_exercice_somalogic/results/SS-2453319_v4.1_EDTAPlasma.hybNorm.medNormInt.plateScale.calibrate.anmlQC.qcCheck.anmlSMP.20240528.adat"
+annot_f <- "/storage/Documents/service/externe/sheela/20240606_LC_exercice_somalogic/results/plate_sample_annot.tsv"
+my_adat <- read_adat(adat_f)
+annot_tbl <- read.csv(
+  annot_f, 
+  header = TRUE,
+  sep="\t",
+  row.names = 1,
+  stringsAsFactors=FALSE
+)
+
+my_adat[ , 'SubjectID_new'] <- NA
+my_adat$SubjectID_new[match(x, y)] <- annot_tbl$SubjectID_new
+
+my_adat[ , 'group'] = NA
+my_adat$group[match(x, y)] <- annot_tbl$group
+my_adat[ , 'sex'] = NA
+my_adat$sex[match(x, y)] <- annot_tbl$sex
+my_adat[ , 'exercice'] = NA
+my_adat$exercice[match(x, y)] <- annot_tbl$exercice
+my_adat[ , 'CompE'] = NA
+my_adat$CompE[match(x, y)] <- annot_tbl$CompE
+my_adat[ , 'CompNE'] = NA
+my_adat$CompNE[match(x, y)] <- annot_tbl$CompNE
+
+# filter seq data from output (too many col error)
+raw <- as.data.frame(my_adat)
+raw_filtered <- raw %>%
+  select(!starts_with("seq."))
+
+# output raw data to tsv
+out=paste(adat_f,".raw.t.tsv",sep='')
+write.table(
+  t(raw),
+  file = out,
+  sep = "\t",
+  row.names = TRUE,
+  col.names = TRUE
+)
+
+out=paste(adat_f,".metadata.tsv",sep='')
+write.table(
+  raw_filtered,
+  file = out,
+  sep = "\t",
+  row.names = TRUE,
+  col.names = TRUE
+)
+
+
+
+```
+
+```{r}
+
+library("tidyverse")
+library("SomaDataIO")
+
+
+# output groups comparisons reports
+
+# center/scale
+cs <- function(.x) {    # .x = numeric vector
+  out <- .x - mean(.x)  # center
+  out / sd(out)         # scale
+}
+
+##### Sample comparison Exercise ####
+## CompE = Covid, E_Post, E_Pre
+
+## compare E_Post vs E_Pre
+comp_name <- "CompE"
+lbl1 <- "EPost"
+lbl2 <- "EPre"
+label <- paste(lbl1,"vs",lbl2,sep='_')
+
+## compare Epost to Covid
+# comp_name <- "CompE"
+# lbl1 <- "EPost"
+# lbl2 <- "Covid"
+# label <- paste(lbl1,"vs",lbl2,sep='_')
+
+## compare Epost to Covid
+# comp_name <- "CompE"
+# lbl1 <- "EPre"
+# lbl2 <- "Covid"
+# label <- paste(lbl1,"vs",lbl2,sep='_')
+
+# comp_name <- "CompNE"
+## compare NE_Post vs NE_Pre
+# comp_name <- "CompNE"
+# lbl1 <- "NEPost"
+# lbl2 <- "NEPre"
+# label <- paste(lbl1,"vs",lbl2,sep='_')
+
+## compare NEpost to Covid
+# comp_name <- "CompNE"
+# lbl1 <- "NEPost"
+# lbl2 <- "Covid"
+# label <- paste(lbl1,"vs",lbl2,sep='_')
+
+## compare NEPre to Covid
+# comp_name <- "CompNE"
+# lbl1 <- "NEPre"
+# lbl2 <- "Covid"
+# label <- paste(lbl1,"vs",lbl2,sep='_')
+
+adat_f <- "/storage/Documents/service/externe/sheela/20240606_LC_exercice_somalogic/results/SS-2453319_v4.1_EDTAPlasma.hybNorm.medNormInt.plateScale.calibrate.anmlQC.qcCheck.anmlSMP.20240528.adat"
+annot_f <- "/storage/Documents/service/externe/sheela/20240606_LC_exercice_somalogic/results/plate_sample_annot.tsv"
+outpath <- "/storage/Documents/service/externe/sheela/20240606_LC_exercice_somalogic/analysis"
+
+my_adat <- read_adat(adat_f)
+annot_tbl <- read.csv(
+  annot_f, 
+  header = TRUE,
+  sep="\t",
+  row.names = 1,
+  stringsAsFactors=FALSE
+)
+
+my_adat[ , 'SubjectID_new'] <- NA
+my_adat$SubjectID_new <- annot_tbl[match(row.names(my_adat), row.names(annot_tbl)),"SubjectID_new"]
+
+my_adat[ , 'group'] = NA
+my_adat$group <- annot_tbl[match(row.names(my_adat), row.names(annot_tbl)),"group"]
+
+my_adat[ , 'sex'] = NA
+my_adat$sex <- annot_tbl[match(row.names(my_adat), row.names(annot_tbl)),"sex"]
+
+my_adat[ , 'exercice'] = NA
+my_adat$exercice <- annot_tbl[match(row.names(my_adat), row.names(annot_tbl)),"exercice"]
+
+my_adat[ , 'CompE'] = NA
+my_adat$CompE <- annot_tbl[match(row.names(my_adat), row.names(annot_tbl)),"CompE"]
+
+my_adat[ , 'CompNE'] = NA
+my_adat$CompNE <- annot_tbl[match(row.names(my_adat), row.names(annot_tbl)),"CompNE"]
+
+rawData <- my_adat |>
+  filter(SampleType == "Sample") |>          # rm control samples
+  filter((!!as.symbol(comp_name)) == lbl1 | (!!as.symbol(comp_name)) == lbl2) |>          # filter for CompE E_Post and E_Pre samples
+  drop_na((!!as.symbol(comp_name)))
+
+cd <- as.data.frame(rawData)
+out=paste(outpath,"/",label,".rawdata.tsv",sep='')
+write.table(
+  cd,
+  file = out,
+  sep = "\t",
+  row.names = FALSE,
+  col.names = TRUE
+)
+
+
+# prepare data set for analysis
+cleanData <- my_adat |>
+  filter(SampleType == "Sample") |>          # rm control samples
+  filter((!!as.symbol(comp_name)) == lbl1 | (!!as.symbol(comp_name)) == lbl2) |>          # filter for CompE E_Post and E_Pre samples
+  drop_na((!!as.symbol(comp_name))) |>                      # rm NAs if present
+  log10() |>                                 # log10-transform (Math Generic)
+  modify_at(getAnalytes(my_adat), cs)   # center/scale analytes
+
+cd_raw <- as.data.frame(cleanData)
+cd_filtered <- cd_raw %>%
+  select(!starts_with("seq."))
+out=paste(outpath,"/",label,".sampleinfo.tsv",sep='')
+write.table(
+  cd_filtered,
+  file = out,
+  sep = "\t",
+  row.names = FALSE,
+  col.names = TRUE
+)
+
+# Compare Two Groups
+
+# Get annotations via getAnalyteInfo():
+ana_info <- getAnalyteInfo(cleanData) |>
+  select(AptName, SeqId, Target = TargetFullName, EntrezGeneSymbol, UniProt)
+
+#Calculate t-tests
+# t_tests <- ana_info |>
+#   mutate(
+#     formula = map(AptName, ~ as.formula(paste(.x, paste("~ ",comp_name,sep = "")))), # create formula
+#     t_test  = map(formula, ~ stats::t.test(.x, data = cleanData)),  # fit t-tests
+#     t_stat  = map_dbl(t_test, "statistic"),            # pull out t-statistic
+#     p.value = map_dbl(t_test, "p.value"),              # pull out p-values
+#     fdr     = p.adjust(p.value, method = "BH")         # FDR for multiple testing
+#   ) |>
+#   arrange(p.value) |>            # re-order by `p-value`
+#   mutate(rank = row_number())    # add numeric ranks
+
+t_tests <- ana_info |>
+  mutate(
+    formula = map(AptName, ~ as.formula(paste(.x, paste("~ ",comp_name,sep = "")))), # create formula
+    t_test  = map(formula, ~ stats::t.test(.x, data = cleanData)),  # fit t-tests
+    t_stat  = map_dbl(t_test, "statistic"),            # pull out t-statistic
+    p.value = map_dbl(t_test, "p.value"),              # pull out p-values
+    fdr     = p.adjust(p.value, method = "BH"),         # FDR for multiple testing
+    log2fc  = log2(
+      apply(
+        cleanData[cleanData[[comp_name]] == lbl1 & !is.na(cleanData[[comp_name]]), getAnalytes(cleanData)], 
+        2, 
+        median
+      ) / apply(
+        cleanData[cleanData[[comp_name]] == lbl2 & !is.na(cleanData[[comp_name]]), getAnalytes(cleanData)], 
+        2, 
+        median
+      )
+    )  # Calculate Log2 Fold Change
+  ) |>
+  arrange(p.value) |>            # re-order by `p-value`
+  mutate(rank = row_number())    # add numeric ranks
+
+cleanData[cleanData[[comp_name]] == lbl1 & !is.na(cleanData[[comp_name]]), getAnalytes(cleanData)]
+
+t <- as.data.frame(t_tests)
+df = t[,!(names(t) %in% c('formula', 't_test'))]
+
+out=paste(outpath,"/",label,".ttest.tsv",sep='')
+write.table(
+  df,
+  file = out,
+  sep = "\t",
+  row.names = FALSE,
+  col.names = TRUE
+)
+
+# ouptut all targets
+target_map_all <- t_tests |>     # mapping table
+  select(AptName, EntrezGeneSymbol, UniProt, Target)               # SeqId -> Target
+tm <- as.data.frame(target_map_all)
+out=paste(outpath,"/",label,".targetinfo.tsv",sep='')
+write.table(
+  tm,
+  file = out,
+  sep = "\t",
+  row.names = FALSE,
+  col.names = TRUE
+)
+
+
+cleanData <- my_adat |>
+  filter(SampleType == "Sample") |>          # rm control samples
+  filter((!!as.symbol(comp_name)) == lbl1 | (!!as.symbol(comp_name)) == lbl2) |>          # filter for CompE E_Post and E_Pre samples
+  drop_na((!!as.symbol(comp_name))) |>                      # rm NAs if present
+  log10() |>                                 # log10-transform (Math Generic)
+  modify_at(getAnalytes(my_adat), cs)   # center/scale analytes
+
+target_map_all <- t_tests |>     # mapping table
+  select(AptName, EntrezGeneSymbol)                # SeqId -> Target
+all_data_tbl <- my_adat |>             # plot non-center/scale data
+  filter(SampleType == "Sample") |>     # rm control samples
+  filter((!!as.symbol(comp_name)) == lbl1 | (!!as.symbol(comp_name)) == lbl2) |>          # filter for CompE E_Post and E_Pre samples
+  drop_na((!!as.symbol(comp_name))) |>                       # rm NAs if present
+  log10() |>    
+  modify_at(getAnalytes(my_adat), cs)  |>
+  select((!!as.symbol(comp_name)), target_map_all$AptName) |>
+  pivot_longer(cols = -(!!as.symbol(comp_name)), names_to = "AptName", values_to = "RFU") |>
+  left_join(target_map_all, by = "AptName") #|>
+  # order factor levels by 't_tests' rank to order plots below
+  #mutate(EntrezGeneSymbol = factor(EntrezGeneSymbol, levels = target_map_all$EntrezGeneSymbol))
+
+pt <- as.data.frame(all_data_tbl)
+out=paste(outpath,"/",label,".alldata.tsv",sep='')
+write.table(
+  pt,
+  file = out,
+  sep = "\t",
+  row.names = FALSE,
+  col.names = TRUE
+)
+
+
+# plot top hits
+target_map <- head(t_tests, 8L) |>     # mapping table
+  select(AptName, EntrezGeneSymbol)               # SeqId -> Target
+
+plot_tbl <- my_adat |>             # plot non-center/scale data
+  filter(SampleType == "Sample") |>     # rm control samples
+  filter((!!as.symbol(comp_name)) == lbl1 | (!!as.symbol(comp_name)) == lbl2) |>          # filter for CompE E_Post and E_Pre samples
+  drop_na((!!as.symbol(comp_name))) |>                       # rm NAs if present
+  log10() |>                            # log10-transform for plotting
+  select((!!as.symbol(comp_name)), target_map$AptName) |>    # top 12 analytes
+  pivot_longer(cols = -(!!as.symbol(comp_name)), names_to = "AptName", values_to = "RFU") |>
+  left_join(target_map, by = "AptName") |>
+  # order factor levels by 't_tests' rank to order plots below
+  mutate(EntrezGeneSymbol = factor(EntrezGeneSymbol, levels = target_map$EntrezGeneSymbol))
+
+pt <- as.data.frame(plot_tbl)
+# sink()
+out=paste(adat_f,".",label,".plotdata.tsv",sep='')
+write.table(
+  pt,
+  file = out,
+  sep = "\t",
+  row.names = TRUE,
+  col.names = TRUE
+)
+
+plot_tbl |>
+  ggplot(aes(x = (!!as.symbol(comp_name)), y = RFU, fill = (!!as.symbol(comp_name)))) +
+  geom_boxplot(alpha = 0.5, outlier.shape = NA) +
+  scale_fill_manual(values = c("#24135F", "#00A499")) +
+  geom_jitter(shape = 16, width = 0.1, alpha = 0.5) +
+  facet_wrap(~ EntrezGeneSymbol, ncol = 3) +
+  ggtitle("Boxplots of Top Analytes by t-test") +
+  labs(y = "log10(RFU)") +
+  theme(plot.title = element_text(size = 21, face = "bold"),
+        axis.title.x = element_text(size = 14),
+        axis.title.y = element_text(size = 14),
+        legend.position = "top"
+  )
+out=paste(adat_f,".",label,".png",sep='')
+ggsave(out,dpi=300)
+
+### gen volcano
+
+# Download the data we will use for plotting
+download.file("https://raw.githubusercontent.com/biocorecrg/CRG_RIntroduction/master/de_df_for_volcano.rds", "de_df_for_volcano.rds", method="curl")
+
+# The RDS format is used to save a single R object to a file, and to restore it.
+# Extract that object in the current session:
+tmp <- readRDS("de_df_for_volcano.rds")
+
+# remove rows that contain NA values
+de <- tmp[complete.cases(tmp), ]
+
+f <- "/storage/Documents/service/externe/sheela/20240606_LC_exercice_somalogic/analysis/EPost_vs_Covid.ttest.tsv"
+de <- read.csv(
+  f, 
+  header = TRUE,
+  sep="\t",
+  row.names = 1,
+  stringsAsFactors=FALSE
+)
+
+# my_adat[ , 'gene_symbol'] = NA
+# my_adat$gene_symbol <- ttest_data$EntrezGeneSymbol
+# my_adat[ , 'log2FoldChange'] = NA
+# my_adat$log2FoldChange <- ttest_data$log2fc
+# my_adat[ , 'gene_symbol'] = NA
+# my_adat$gene_symbol <- ttest_data$EntrezGeneSymbol
+
+library(ggplot2)
+
+de$diffexpressed <- "NO"
+# if log2Foldchange > 0.6 and pvalue < 0.05, set as "UP" 
+de$diffexpressed[de$log2fc > 0.6 & de$p.value < 0.05] <- "UP"
+# if log2Foldchange < -0.6 and pvalue < 0.05, set as "DOWN"
+de$diffexpressed[de$log2fc < -0.6 & de$p.value < 0.05] <- "DOWN"
+
+# Re-plot but this time color the points with "diffexpressed"
+p <- ggplot(data=de, aes(x=log2fc, y=-log10(p.value), col=diffexpressed)) + geom_point() + theme_minimal()
+# Add lines as before...
+p2 <- p + geom_vline(xintercept=c(-0.6, 0.6), col="red") +
+        geom_hline(yintercept=-log10(0.05), col="red")
+
+# 2. to automate a bit: ceate a named vector: the values are the colors to be used, the names are the categories they will be assigned to:
+mycolors <- c("blue", "red", "black")
+names(mycolors) <- c("DOWN", "UP", "NO")
+p3 <- p2 + scale_colour_manual(values = mycolors)
+
+de$delabel <- NA
+de$delabel[de$diffexpressed != "NO"] <- de$EntrezGeneSymbol[de$diffexpressed != "NO"]
+
+ggplot(data=de, aes(x=log2fc, y=-log10(p.value), col=diffexpressed, label=delabel)) + 
+    geom_point() + 
+    theme_minimal() +
+    geom_text()
+
+ggsave("/storage/Documents/service/externe/sheela/20240606_LC_exercice_somalogic/analysis/test.png",dpi=300)
+
+volcano_data_df <- t_tests |>     # mapping table
+  select(AptName, EntrezGeneSymbol, UniProt, Target)               # SeqId -> Target
+
+
+
+
+```
