@@ -45,7 +45,7 @@ if (fc_col == ''){
 
 out <- paste(
     o,
-    comp_label,
+    lbl,
     sep='/'
 )
 if (!dir.exists(out)){
