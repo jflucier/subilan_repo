@@ -6,9 +6,12 @@
 # warnings.filterwarnings("ignore", category=DeprecationWarning)
 
 import os.path
+import re
 import subprocess
 import sys
 import csv
+import random
+
 import numpy as np
 import scanpy as sc
 import anndata as ad
@@ -27,7 +30,7 @@ from scipy.sparse import csr_matrix, issparse
 # warnings.simplefilter("ignore", category=NumbaDeprecationWarning)
 import celltypist
 from celltypist import models
-
+import sc_toolbox
 
 sc.settings.set_figure_params(dpi=80, facecolor="white")
 outpath = "/storage/Documents/service/externe/ilan/20241209_scRNAseq_FL_SA/out"
@@ -715,6 +718,22 @@ def run_annotation(adata, outpath, resolutions, markers):
 
     return adata
 
+def output_dge_qc(adata_pb, outpath):
+    adata_pb.layers['counts'] = adata_pb.X.copy()
+    sc.pp.normalize_total(adata_pb, target_sum=1e6)
+    sc.pp.log1p(adata_pb)
+    sc.pp.pca(adata_pb)
+    adata_pb.obs["lib_size"] = np.sum(adata_pb.layers["counts"], axis=1)
+    adata_pb.obs["log_lib_size"] = np.log(adata_pb.obs["lib_size"].astype(float))
+
+    with PdfPages(os.path.join(outpath, f"dge_report_PCA_QC.pdf"), ) as pdf:
+        sc.pl.pca(adata_pb, color=adata_pb.obs, ncols=1, size=300, show=False)
+        pdf.savefig(bbox_inches="tight")
+
+    adata_pb.X = adata_pb.layers['counts'].copy()
+    return adata_pb
+
+
 def aggregate_and_filter(
     adata,
     cell_identity,
@@ -723,8 +742,9 @@ def aggregate_and_filter(
     obs_to_keep=[],  # which additional metadata to keep, e.g. gender, age, etc.
     replicates_per_patient=3,
 ):
-    NUM_OF_CELL_PER_DONOR = 30
+    NUM_OF_CELL_PER_DONOR = 10
     # subset adata to the given cell identity
+    adata.obs[cell_identity_key]
     adata_cell_pop = adata[adata.obs[cell_identity_key] == cell_identity].copy()
     # check which donors to keep according to the number of cells specified with NUM_OF_CELL_PER_DONOR
     size_by_donor = adata_cell_pop.obs.groupby([donor_key]).size()
@@ -740,7 +760,7 @@ def aggregate_and_filter(
 
     adata_cell_pop.obs[donor_key] = adata_cell_pop.obs[donor_key].astype("category")
     for i, donor in enumerate(donors := adata_cell_pop.obs[donor_key].cat.categories):
-        print(f"\tProcessing donor {i+1} out of {len(donors)}...", end="\r")
+        print(f"\tProcessing experiment {donor} {i+1} out of {len(donors)}...", end="\r")
         if donor not in donors_to_drop:
             adata_donor = adata_cell_pop[adata_cell_pop.obs[donor_key] == donor]
             # create replicates for each donor
@@ -761,7 +781,7 @@ def aggregate_and_filter(
                 # aggregate
                 df_donor = df_donor.groupby(donor_key).agg(agg_dict)
                 df_donor[donor_key] = donor
-                df.loc[f"donor_{donor}_{i}"] = df_donor.loc[donor]
+                df.loc[f"{donor}_{i}"] = df_donor.loc[donor]
     print("\n")
     # create AnnData object from the df
     adata_cell_pop = sc.AnnData(
@@ -769,11 +789,33 @@ def aggregate_and_filter(
     )
     return adata_cell_pop
 
-def run_dge(adata, outpath, resolutions):
+def plot_heatmap(adata, group_key, group_name="cell_type", groupby="label", LOG_FOLD_CHANGE=1.0, FDR=0.05):
+    cell_type = group_key.rsplit("-", 1)[1]
+    res = sc.get.rank_genes_groups_df(adata, group=cell_type, key=group_key)
+    res.index = res["names"].values
+    res = res[
+        (res["pvals_adj"] < FDR) & (abs(res["logfoldchanges"]) > LOG_FOLD_CHANGE)
+    ].sort_values(by=["logfoldchanges"])
+    print(f"Plotting {len(res)} genes...")
+    markers = list(res.index)
+    sc.pl.heatmap(
+        adata[adata.obs[group_name] == cell_type].copy(),
+        markers,
+        groupby=groupby,
+        swap_axes=True,
+        show=False,
+        title = group_key
+    )
+    pdf.savefig(bbox_inches="tight")
+
+def run_dge(adata, outpath, resolutions, treat_group_regex, ctrl_group_regex):
     print("## Running differential gene expression analysis")
     dge_path = os.path.join(outpath, '06-DifferentialGeneExpression')
     if not os.path.exists(dge_path):
         os.makedirs(dge_path, exist_ok=True)
+
+    # print("# Write resulting adata object to h5ad file")
+    # adata.write(os.path.join(outpath, "adata_dge2.h5ad"))
 
     # x = np.max(adata.X)
     print(f"Preparing dge input files")
@@ -782,29 +824,135 @@ def run_dge(adata, outpath, resolutions):
 
     adata_dge.obs["clustifyr_cell_label_0.1"] = [ct.replace(" ", "_") for ct in adata_dge.obs["clustifyr_cell_label_0.1"]]
     adata_dge.obs["clustifyr_cell_label_0.1"] = [ct.replace("+", "") for ct in adata_dge.obs["clustifyr_cell_label_0.1"]]
+    adata_dge.obs["clustifyr_cell_label_0.1"] = [ct.replace("(", "") for ct in adata_dge.obs["clustifyr_cell_label_0.1"]]
+    adata_dge.obs["clustifyr_cell_label_0.1"] = [ct.replace(")", "") for ct in adata_dge.obs["clustifyr_cell_label_0.1"]]
 
     adata_dge.obs["sample"] = adata_dge.obs["sample"].astype("category")
     adata_dge.obs["clustifyr_cell_label_0.1"] = adata_dge.obs["clustifyr_cell_label_0.1"].astype("category")
 
     adata_dge.X = adata_dge.layers["counts"].copy()
-    obs_to_keep = ["cell_type", "sample"]
+    obs_to_keep = ["clustifyr_cell_label_0.1", "sample"]
 
     cell_type = adata_dge.obs["clustifyr_cell_label_0.1"].cat.categories[0]
     print(
-        f'Processing {cell_type} (1 out of {len(adata.obs["clustifyr_cell_label_0.1"].cat.categories)})...'
+        f'Processing {cell_type} (1 out of {len(adata_dge.obs["clustifyr_cell_label_0.1"].cat.categories)})...'
     )
-    adata_pb = aggregate_and_filter(adata, cell_type, obs_to_keep=obs_to_keep)
-    for i, cell_type in enumerate(adata.obs["cell_type"].cat.categories[1:]):
+    adata_pb = aggregate_and_filter(adata_dge, cell_type, cell_identity_key="clustifyr_cell_label_0.1", obs_to_keep=obs_to_keep)
+    for i, cell_type in enumerate(adata_dge.obs["clustifyr_cell_label_0.1"].cat.categories[1:]):
         print(
-            f'Processing {cell_type} ({i + 2} out of {len(adata.obs["cell_type"].cat.categories)})...'
+            f'Processing {cell_type} ({i + 2} out of {len(adata_dge.obs["clustifyr_cell_label_0.1"].cat.categories)})...'
         )
-        adata_cell_type = aggregate_and_filter(adata, cell_type, obs_to_keep=obs_to_keep)
+        adata_cell_type = aggregate_and_filter(adata_dge, cell_type, cell_identity_key="clustifyr_cell_label_0.1", obs_to_keep=obs_to_keep)
         adata_pb = adata_pb.concatenate(adata_cell_type)
+
+    adata_pb = output_dge_qc(adata_pb, dge_path)
+
+    # print("# Write resulting adata object to h5ad file")
+    # adata.write(os.path.join(outpath, "adata_dge3.h5ad"))
+
+
+    # adata_pb.write(os.path.join(dge_path, "adata_dge.h5ad"))
+    # adata = sc.read_h5ad(os.path.join(dge_path, "adata_dge.h5ad"))
+    counts_df = pd.DataFrame(
+        adata_pb.X.T,  # Transpose here!
+        index=adata_pb.var_names,  # Genes as rows
+        columns=adata_pb.obs_names  # Cells as columns
+    )
+    counts_df.to_csv(os.path.join(dge_path, 'edger_counts.tsv'), sep='\t')
+
+    # Export group information (important for edgeR)
+    groups_df = pd.DataFrame(
+        adata_pb.obs,  # Or whichever column defines your groups
+        index=adata_pb.obs_names
+    )
+    groups_df = groups_df.rename(columns={"clustifyr_cell_label_0.1": "cell_type"})
+    groups_df.to_csv(os.path.join(dge_path, 'edger_groups.tsv'), sep='\t')  # Save groups to tsv
+
+    print("Running EdgeR")
+    command = (
+            "Rscript --vanilla "
+            + os.path.join(os.path.dirname(__file__), '../R/run_edger.R ')
+            + " -o " + dge_path
+            + " -m " + os.path.join(dge_path, 'edger_counts.tsv')
+            + " -g " + os.path.join(dge_path, 'edger_groups.tsv')
+            + " -t " + treat_group_regex
+            + " -c " + ctrl_group_regex
+    )
+    print(command)
+    return_code = subprocess.call(command, shell=True)
+
+    if return_code == 0:
+        print("EdgeR executed successfully.")
+    else:
+        print("EdgeR failed with return code", return_code)
+
+    sample = adata_dge.obs["sample"].cat.categories
+    ctrl_group = []
+    treat_group = []
+
+    for s in sample:
+        if re.search(ctrl_group_regex, s):
+            ctrl_group.append(s)
+        elif re.search(treat_group_regex, s):
+            treat_group.append(s)
+
+    print("# Write resulting adata object to h5ad file")
+    adata.write(os.path.join(outpath, "adata_dge4.h5ad"))
+
+
+
+    with PdfPages(os.path.join(dge_path, f"dge_report_heatmaps.pdf"), ) as pdf:
+        for i, cell_type in enumerate(adata_dge.obs["clustifyr_cell_label_0.1"].cat.categories[1:]):
+            for e in treat_group:
+                for c in ctrl_group:
+                    rf = dge_path + '/dge_' + e + "--" + c + "--" + cell_type + '.tsv'
+                    print(f'Processing EdgeR results for {rf}')
+                    if os.path.isfile(rf):
+                        print(f"Reading EdgeR result {rf}")
+                        edger_df = pd.read_csv(rf, sep="\t", index_col=0)
+                        edger_df["gene_symbol"] = edger_df.index
+                        edger_df["clustifyr_cell_label_0.1"] = cell_type
+                        sc_toolbox.tools.de_res_to_anndata(
+                            adata,
+                            edger_df,
+                            groupby="clustifyr_cell_label_0.1",
+                            score_col="logCPM",
+                            pval_col="PValue",
+                            pval_adj_col="FDR",
+                            lfc_col="logFC",
+                            key_added=f"edgeR-{e}-{c}-{cell_type}",
+                        )
+                    else:
+                        print(f"EdgeR result {rf} does not exist")
+
+    for key, value in adata.uns.items():
+        if isinstance(value, dict):  # Check if it is a dictionary
+            for sub_key, sub_value in value.items():  # If it is, check all the values inside
+                if not isinstance(sub_value, str):
+                    print(f"Key: adata.uns['{key}']['{sub_key}'], Value: {sub_value}, Type: {type(sub_value)}")
+        elif not isinstance(value, str):
+            print(f"Key: adata.uns['{key}'], Value: {value}, Type: {type(value)}")
+
+    print("# Write resulting adata object to h5ad file")
+    adata.write(os.path.join(outpath, "adata_dge.h5ad"))
+
+    # adata = sc.read_h5ad(os.path.join(outpath, "adata_dge.h5ad"))
+
+    with PdfPages(os.path.join(dge_path, f"dge_report_heatmaps.pdf"), ) as pdf:
+        for i, cell_type in enumerate(adata_dge.obs["clustifyr_cell_label_0.1"].cat.categories[1:]):
+            for e in treat_group:
+                for c in ctrl_group:
+                    plot_heatmap(
+                        adata,
+                        f"edgeR-{e}-{c}-{cell_type}",
+                        group_name="clustifyr_cell_label_0.1",
+                        groupby="sample"
+                    )
 
     print("done dge")
 
 
-def main(samples, outpath, resolutions, markers):
+def main(samples, outpath, resolutions, markers, treat_group_regex, ctrl_group_regex):
     print("Starting")
     # adata = read_cellranger(samples)
     #
@@ -825,12 +973,12 @@ def main(samples, outpath, resolutions, markers):
     #
     # # adata = sc.read_h5ad(os.path.join(outpath, "adata_dimensionality_reduction.h5ad"))
     # adata = run_clustering(adata, outpath, resolutions)
-
-    adata = sc.read_h5ad(os.path.join(outpath, "adata_clustering.h5ad"))
-    adata = run_annotation(adata, outpath, resolutions, markers)
+    #
+    # # adata = sc.read_h5ad(os.path.join(outpath, "adata_clustering.h5ad"))
+    # adata = run_annotation(adata, outpath, resolutions, markers)
 
     adata = sc.read_h5ad(os.path.join(outpath, "adata_annotation.h5ad"))
-    adata = run_dge(adata, outpath, resolutions)
+    adata = run_dge(adata, outpath, resolutions, treat_group_regex, ctrl_group_regex)
 
     print("Done")
 
@@ -842,6 +990,9 @@ samples_raw = {
     "FL_T": "/home/jflucier/Documents/service/externe/ilan/20241209_scRNAseq_FL_SA/cellranger/FL_T/raw_feature_bc_matrix.h5",
     "V_T": "/home/jflucier/Documents/service/externe/ilan/20241209_scRNAseq_FL_SA/cellranger/V_T/raw_feature_bc_matrix.h5",
 }
+
+treat_group_regex = "FL"
+ctrl_group_regex = "V"
 
 # leiden resolutions to process
 resolutions = [0.10, 0.25, 0.50, 1.00]
@@ -861,7 +1012,7 @@ marker_genes = {
     "Neutrophils": ["Csf3r", "Cxcl3"] #, "S100a8", "S100a9"
 }
 
-main(samples, outpath, resolutions, marker_genes)
+main(samples, outpath, resolutions, marker_genes, treat_group_regex, ctrl_group_regex)
 
 
 
