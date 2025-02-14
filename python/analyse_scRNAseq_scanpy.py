@@ -1,7 +1,7 @@
 ### https://www.sc-best-practices.org/preamble.html
 ### https://scanpy.readthedocs.io/en/stable/index.html
 ### https://github.com/scverse/scanpy
-
+import json
 # import warnings
 # warnings.filterwarnings("ignore", category=DeprecationWarning)
 
@@ -12,11 +12,13 @@ import sys
 import csv
 import random
 
+import matplotlib
 import numpy as np
 import scanpy as sc
 import anndata as ad
 import pandas as pd
 import seaborn as sns
+import pertpy as pt
 
 from matplotlib import pyplot as plt
 from matplotlib.pyplot import rc_context
@@ -24,13 +26,19 @@ from matplotlib.backends.backend_pdf import PdfPages
 from scipy.stats import median_abs_deviation
 from scipy import sparse, io
 from scipy.sparse import csr_matrix, issparse
+import scvi
+import sccoda
+from sccoda.util import cell_composition_data as dat
+from sccoda.util import data_visualization as viz
+from sccoda.util import comp_ana as mod
+from sccoda.model import other_models as om
 
 # import numba
 # from numba.core.errors import NumbaDeprecationWarning, NumbaPendingDeprecationWarning
 # warnings.simplefilter("ignore", category=NumbaDeprecationWarning)
 import celltypist
 from celltypist import models
-import sc_toolbox
+import sc_toolbox as sct
 
 sc.settings.set_figure_params(dpi=80, facecolor="white")
 outpath = "/storage/Documents/service/externe/ilan/20241209_scRNAseq_FL_SA/out"
@@ -789,7 +797,7 @@ def aggregate_and_filter(
     )
     return adata_cell_pop
 
-def plot_heatmap(adata, group_key, group_name="cell_type", groupby="label", LOG_FOLD_CHANGE=1.0, FDR=0.05):
+def plot_heatmap(pdf, adata, group_key, group_name="cell_type", groupby="label", LOG_FOLD_CHANGE=1.0, FDR=0.05):
     cell_type = group_key.rsplit("-", 1)[1]
     res = sc.get.rank_genes_groups_df(adata, group=cell_type, key=group_key)
     res.index = res["names"].values
@@ -803,10 +811,58 @@ def plot_heatmap(adata, group_key, group_name="cell_type", groupby="label", LOG_
         markers,
         groupby=groupby,
         swap_axes=True,
-        show=False,
-        title = group_key
+        show=False
     )
     pdf.savefig(bbox_inches="tight")
+
+def volcano_plot(pdf, adata, group_key, group_name="cell_type", groupby="label", title=None, LOG_FOLD_CHANGE=1.0, FDR=0.05):
+    cell_type = group_key.rsplit("-", 1)[1]
+    result = sc.get.rank_genes_groups_df(adata, group=cell_type, key=group_key).copy()
+    result["-logQ"] = -np.log(result["pvals_adj"].astype("float"))
+    lowqval_de = result.loc[(result["pvals_adj"] <= FDR) & (abs(result["logfoldchanges"]) >= LOG_FOLD_CHANGE)]
+    other_de = result.loc[(result["pvals_adj"] > FDR) | (abs(result["logfoldchanges"]) < LOG_FOLD_CHANGE)]
+
+    fig, ax = plt.subplots()
+    sns.regplot(
+        x=other_de["logfoldchanges"],
+        y=other_de["-logQ"],
+        fit_reg=False,
+        scatter_kws={"s": 6},
+    )
+    sns.regplot(
+        x=lowqval_de["logfoldchanges"],
+        y=lowqval_de["-logQ"],
+        fit_reg=False,
+        scatter_kws={"s": 6},
+    )
+
+    # Add labels to lowqval_de points
+    for i, row in lowqval_de.iterrows():  # Iterate through lowqval_de DataFrame
+        x_coord = row["logfoldchanges"]
+        y_coord = row["-logQ"]
+
+        x_offset = -2 if x_coord < 0 else 2  # Offset left if logFC < 0, right otherwise
+        y_offset = 2  # Vertical offset (adjust as needed)
+
+        ha = "right" if x_coord < 0 else "left"  # Horizontal alignment
+
+        ax.annotate(
+            row["names"],
+            (x_coord, y_coord),
+            textcoords="offset points",
+            xytext=(x_offset, y_offset),
+            ha=ha,  # Horizontal alignment based on logFC
+            va="bottom",  # Vertical alignment
+            fontsize=8
+        )
+
+    ax.set_xlabel("log2 FC")
+    ax.set_ylabel("-log10 Adjusted pvalue")
+
+    if title is None:
+        title = group_key.replace("-", " ")
+    fig.suptitle(title)
+    pdf.savefig(fig, bbox_inches="tight")
 
 def run_dge(adata, outpath, resolutions, treat_group_regex, ctrl_group_regex):
     print("## Running differential gene expression analysis")
@@ -814,10 +870,6 @@ def run_dge(adata, outpath, resolutions, treat_group_regex, ctrl_group_regex):
     if not os.path.exists(dge_path):
         os.makedirs(dge_path, exist_ok=True)
 
-    # print("# Write resulting adata object to h5ad file")
-    # adata.write(os.path.join(outpath, "adata_dge2.h5ad"))
-
-    # x = np.max(adata.X)
     print(f"Preparing dge input files")
     adata_dge = adata.copy()
     adata_dge.layers["counts"] = adata_dge.layers["soupX_counts"]
@@ -847,12 +899,6 @@ def run_dge(adata, outpath, resolutions, treat_group_regex, ctrl_group_regex):
 
     adata_pb = output_dge_qc(adata_pb, dge_path)
 
-    # print("# Write resulting adata object to h5ad file")
-    # adata.write(os.path.join(outpath, "adata_dge3.h5ad"))
-
-
-    # adata_pb.write(os.path.join(dge_path, "adata_dge.h5ad"))
-    # adata = sc.read_h5ad(os.path.join(dge_path, "adata_dge.h5ad"))
     counts_df = pd.DataFrame(
         adata_pb.X.T,  # Transpose here!
         index=adata_pb.var_names,  # Genes as rows
@@ -896,13 +942,8 @@ def run_dge(adata, outpath, resolutions, treat_group_regex, ctrl_group_regex):
         elif re.search(treat_group_regex, s):
             treat_group.append(s)
 
-    print("# Write resulting adata object to h5ad file")
-    adata.write(os.path.join(outpath, "adata_dge4.h5ad"))
-
-
-
     with PdfPages(os.path.join(dge_path, f"dge_report_heatmaps.pdf"), ) as pdf:
-        for i, cell_type in enumerate(adata_dge.obs["clustifyr_cell_label_0.1"].cat.categories[1:]):
+        for i, cell_type in enumerate(adata_dge.obs["clustifyr_cell_label_0.1"].cat.categories[0:]):
             for e in treat_group:
                 for c in ctrl_group:
                     rf = dge_path + '/dge_' + e + "--" + c + "--" + cell_type + '.tsv'
@@ -912,8 +953,8 @@ def run_dge(adata, outpath, resolutions, treat_group_regex, ctrl_group_regex):
                         edger_df = pd.read_csv(rf, sep="\t", index_col=0)
                         edger_df["gene_symbol"] = edger_df.index
                         edger_df["clustifyr_cell_label_0.1"] = cell_type
-                        sc_toolbox.tools.de_res_to_anndata(
-                            adata,
+                        sct.tools.de_res_to_anndata(
+                            adata_dge,
                             edger_df,
                             groupby="clustifyr_cell_label_0.1",
                             score_col="logCPM",
@@ -925,31 +966,195 @@ def run_dge(adata, outpath, resolutions, treat_group_regex, ctrl_group_regex):
                     else:
                         print(f"EdgeR result {rf} does not exist")
 
-    for key, value in adata.uns.items():
-        if isinstance(value, dict):  # Check if it is a dictionary
-            for sub_key, sub_value in value.items():  # If it is, check all the values inside
-                if not isinstance(sub_value, str):
-                    print(f"Key: adata.uns['{key}']['{sub_key}'], Value: {sub_value}, Type: {type(sub_value)}")
-        elif not isinstance(value, str):
-            print(f"Key: adata.uns['{key}'], Value: {value}, Type: {type(value)}")
+    adata_dge.X = adata_dge.layers["counts"].copy()
+    sc.pp.normalize_total(adata_dge, target_sum=1e6)
+    sc.pp.log1p(adata_dge)
 
-    print("# Write resulting adata object to h5ad file")
-    adata.write(os.path.join(outpath, "adata_dge.h5ad"))
-
-    # adata = sc.read_h5ad(os.path.join(outpath, "adata_dge.h5ad"))
-
-    with PdfPages(os.path.join(dge_path, f"dge_report_heatmaps.pdf"), ) as pdf:
-        for i, cell_type in enumerate(adata_dge.obs["clustifyr_cell_label_0.1"].cat.categories[1:]):
+    with PdfPages(os.path.join(dge_path, f"dge_report_volcanos.pdf")) as pdf:
+        for i, cell_type in enumerate(adata_dge.obs["clustifyr_cell_label_0.1"].cat.categories[0:]):
             for e in treat_group:
                 for c in ctrl_group:
-                    plot_heatmap(
-                        adata,
+                    volcano_plot(
+                        pdf,
+                        adata_dge,
                         f"edgeR-{e}-{c}-{cell_type}",
                         group_name="clustifyr_cell_label_0.1",
-                        groupby="sample"
+                        groupby="sample",
+                        title=f"{e} vs {c} for {cell_type}"
                     )
 
     print("done dge")
+    return adata_dge
+
+def run_composition(adata, outpath, resolutions):
+    print("## Running compositional analysis")
+    comp_path = os.path.join(outpath, '07-CellComposition')
+    if not os.path.exists(comp_path):
+        os.makedirs(comp_path, exist_ok=True)
+
+    adata_comp = adata.copy()
+    data_sc = dat.from_scanpy(
+        adata_comp,
+        cell_type_identifier="clustifyr_cell_label_0.1",
+        sample_identifier="sample"
+    )
+
+    data_sc.obs["condition"] = data_sc.obs.index
+    model_all = mod.CompositionalAnalysis(data_sc, formula="condition", reference_cell_type="automatic")
+    all_results = model_all.sample_hmc()
+    (intercept_df,effect_df) = all_results.summary_prepare(est_fdr=0.05)
+    effect_df.to_csv(os.path.join(comp_path, 'comp_effect.tsv'), sep="\t", header=True)
+    intercept_df.to_csv(os.path.join(comp_path, 'comp_intercept.tsv'), sep="\t", header=True)
+
+    with PdfPages(os.path.join(comp_path, f"compositional_analysis_report.pdf")) as pdf:
+        viz.stacked_barplot(
+            data_sc,
+            feature_name="samples",
+            plot_legend=True
+        )
+        # plt.show()
+        pdf.savefig(bbox_inches="tight")
+
+
+        viz.boxplots(
+            data_sc,
+            feature_name="condition",
+            plot_facets=False,
+            y_scale="relative",
+            add_dots=False,
+        )
+        pdf.savefig(bbox_inches="tight")
+
+        viz.rel_abundance_dispersion_plot(
+            data=data_sc,
+            abundant_threshold=0.9,
+            figsize=(10,10)
+        )
+        pdf.savefig(bbox_inches="tight")
+
+        # viz.boxplots(
+        #     data_sc,
+        #     feature_name="condition",
+        #     plot_facets=True,
+        #     y_scale="log",
+        #     add_dots=True,
+        #     cmap="Reds",
+        # )
+        # pdf.savefig(bbox_inches="tight")
+
+    print("done")
+
+    ### not workinfg since only having 1N per sample
+    # adata_comp.obs["condition"] = adata_comp.obs["sample"]
+    # # adata_comp.obs["sample"] = "T"
+    # milo = pt.tl.Milo()
+    # mdata = milo.load(adata_comp)
+    #
+    # milo.make_nhoods(mdata, prop=0.1)
+    # milo.count_nhoods(mdata, sample_col="sample")
+    #
+    # # # The crucial change: NO drop_duplicates()
+    # # covariates = ["sample"]  # Or whatever covariates are in your design formula
+    # # sample_obs = mdata["milo"].obs[covariates].copy()  # Copy is important!
+    # # sample_obs.index = sample_obs["sample"]  # Set index to sample names
+    # #
+    # # mdata["milo"].obs = sample_obs.loc[mdata["milo"].obs_names]  # Update Milo's obs
+    #
+    # milo.da_nhoods(
+    #     mdata, design="~ condition", solver="batchglm" #, model_contrasts="FL_T-V_T"
+    # )
+    # # milo_results_salmonella = mdata["milo"].obs.copy()
+    # # milo_results_salmonella
+    #
+    # milo.build_nhood_graph(mdata)
+    # with matplotlib.rc_context({"figure.figsize": [10, 10]}):
+    #     milo.plot_nhood_graph(mdata, alpha=0.1, min_size=5, plot_edges=False)
+    #     sc.pl.umap(mdata["rna"], color="clustifyr_cell_label_0.1", legend_loc="on data")
+    #
+    # with PdfPages(os.path.join(comp_path, f"compositional_analysis_report.pdf")) as pdf:
+    #     sc.pl.umap(adata_comp, color=["sample", "clustifyr_cell_label_0.1"], ncols=2, wspace=0.25, show=False)
+    #     pdf.savefig(bbox_inches="tight")
+    #
+    #     nhood_size = adata_comp.obsm["nhoods"].toarray().sum(0)
+    #     fig, ax = plt.subplots(1, 1, figsize=(10, 5))
+    #     ax.hist(nhood_size, bins=20)
+    #     ax.set_xlabel("# cells in neighbourhood")
+    #     ax.set_ylabel("# neighbouthoods")
+    #     pdf.savefig(bbox_inches="tight")
+    #
+    #     mean_n_cells = mdata["milo"].X.toarray().mean(0)
+    #     fig, ax = plt.subplots(1, 1, figsize=(10, 5))
+    #     ax.plot(nhood_size, mean_n_cells, ".")
+    #     ax.set_xlabel("# cells in nhood")
+    #     ax.set_ylabel("Mean # cells per sample in nhood")
+    #     pdf.savefig(bbox_inches="tight")
+
+
+
+
+        ### not needed
+        # adata_scvi = adata_comp[:, adata_comp.var["highly_variable"]].copy()
+        # scvi.model.SCVI.setup_anndata(adata_scvi, layer="counts", batch_key="sample")
+        # model_scvi = scvi.model.SCVI(adata_scvi)
+        # max_epochs_scvi = int(np.min([round((20000 / adata.n_obs) * 400), 400]))
+        # model_scvi.train(max_epochs=max_epochs_scvi)
+        # adata_comp.obsm["X_scVI"] = model_scvi.get_latent_representation()
+        # sc.pp.neighbors(adata_comp, use_rep="X_scVI")
+        # sc.tl.umap(adata_comp)
+        # sc.pl.umap(adata_comp, color=["sample", "clustifyr_cell_label_0.1"], ncols=3, wspace=0.25, show=False)
+        # pdf.savefig(bbox_inches="tight")
+
+
+
+    # sccoda_model = pt.tl.Sccoda()
+    # sccoda_data = sccoda_model.load(
+    #     adata,
+    #     type="cell_level",
+    #     generate_sample_level=True,
+    #     cell_type_identifier="clustifyr_cell_label_0.1",
+    #     sample_identifier="sample",
+    #     covariate_obs=["sample"],
+    # )
+    #
+    # with PdfPages(os.path.join(comp_path, f"compositional_analysis_report.pdf")) as pdf:
+    #     sccoda_model.plot_boxplots(
+    #         sccoda_data,
+    #         modality_key="coda",
+    #         feature_name="sample",
+    #         figsize=(20, 10),
+    #         add_dots=True,
+    #         show=False,
+    #     )
+    #     pdf.savefig(bbox_inches="tight")
+    #
+    #     sccoda_model.plot_stacked_barplot(
+    #         sccoda_data, modality_key="coda", feature_name="sample", figsize=(20, 10), show=False,
+    #     )
+    #     pdf.savefig(bbox_inches="tight")
+    #
+    #     ### problem with not enough cells i think #####
+    #
+    #     # sccoda_data = sccoda_model.prepare(
+    #     #     sccoda_data,
+    #     #     modality_key="coda",
+    #     #     formula="sample",
+    #     #     reference_cell_type="automatic",
+    #     # )
+    #     # sccoda_model.run_nuts(sccoda_data, modality_key="coda", rng_key=1234)
+    #     # sccoda_model.set_fdr(sccoda_data, 0.2)
+    #     # sccoda_model.credible_effects(sccoda_data, modality_key="coda")
+    #     # sccoda_model.plot_effects_barplot(
+    #     #     sccoda_data,
+    #     #     modality_key="coda",
+    #     #     covariates=["sample"],
+    #     #     plot_facets=False,
+    #     #     plot_zero_cell_type=True,
+    #     #     plot_zero_covariate=True,
+    #     #     show=False
+    #     # )
+    #     # pdf.savefig(bbox_inches="tight")
+
+
 
 
 def main(samples, outpath, resolutions, markers, treat_group_regex, ctrl_group_regex):
@@ -978,7 +1183,8 @@ def main(samples, outpath, resolutions, markers, treat_group_regex, ctrl_group_r
     # adata = run_annotation(adata, outpath, resolutions, markers)
 
     adata = sc.read_h5ad(os.path.join(outpath, "adata_annotation.h5ad"))
-    adata = run_dge(adata, outpath, resolutions, treat_group_regex, ctrl_group_regex)
+    # adata_dge = run_dge(adata, outpath, resolutions, treat_group_regex, ctrl_group_regex)
+    adata = run_composition(adata, outpath, resolutions)
 
     print("Done")
 
@@ -1014,14 +1220,6 @@ marker_genes = {
 
 main(samples, outpath, resolutions, marker_genes, treat_group_regex, ctrl_group_regex)
 
-
-
-
-# # Let us compute the neighborhood graph of cells using the PCA representation of the data matrix.
-# # sc.pp.neighbors(adata)
-# # or used bknn
-# print("# BKNN")
-# sc.external.pp.bbknn(adata, batch_key="sample")
 
 
 
