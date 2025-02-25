@@ -8,7 +8,7 @@
 
 suppressPackageStartupMessages(library("optparse"))
 suppressPackageStartupMessages(library("edgeR"))
-suppressPackageStartupMessages(library("MAST"))
+# suppressPackageStartupMessages(library("MAST"))
 
 fit_model <- function(c_data,g_data){
   # create an edgeR object with counts and grouping factor
@@ -41,6 +41,7 @@ option_list <- list(
   make_option(c("-o", "--outpath"), type="character", default=NULL, help="output file path", metavar="character"),
   make_option(c("-m", "--count_tsv"), type="character", default=NULL, help="Count tsv matrix", metavar="character"),
   make_option(c("-g", "--groups"), type="character", default=NULL, help="Groups tsv", metavar="character"),
+  make_option(c("-r", "--res"), type="character", default=NULL, help="Leiden resolution", metavar="character"),
   make_option(c("-t", "--treated_regex"), type="character", default=NULL, help="treated group selection regex", metavar="character"),
   make_option(c("-c", "--ctrl_regex"), type="character", default=NULL, help="control group selection regex", metavar="character")
 );
@@ -51,11 +52,12 @@ opt <- parse_args(opt_parser);
 out <- opt$outpath
 counts <- opt$count_tsv
 groups <- opt$groups
+res <- opt$res
 exp_regex <- opt$treated_regex
 ctrl_regex <- opt$ctrl_regex
 
-# counts <- "/storage/Documents/service/externe/ilan/20241209_scRNAseq_FL_SA/out/06-DifferentialGeneExpression/edger_in.tsv"
-# groups <- "/storage/Documents/service/externe/ilan/20241209_scRNAseq_FL_SA/out/06-DifferentialGeneExpression/groups.tsv"
+# counts <- "/storage/Documents/service/externe/ilan/20241209_scRNAseq_FL_SA/out/06-DifferentialGeneExpression/edger_counts.tsv"
+# groups <- "/storage/Documents/service/externe/ilan/20241209_scRNAseq_FL_SA/out/06-DifferentialGeneExpression/edger_groups.tsv"
 # out <- "/storage/Documents/service/externe/ilan/20241209_scRNAseq_FL_SA/out/06-DifferentialGeneExpression"
 # exp_regex <- "FL"
 # ctrl_regex <- "V"
@@ -92,8 +94,10 @@ fit <- model$fit
 y <- model$y
 d <- model$design
 
+pdf(paste0(out, "/Edger.plots.",res,".pdf"))
 plotMDS(y, col=ifelse(y$samples$group == "FL_T", "red", "blue"))
 plotBCV(y)
+dev.off()
 
 design_names <- colnames(y$design)
 for (cell_type in unique(g_data$cell_type)) {
@@ -123,7 +127,7 @@ for (cell_type in unique(g_data$cell_type)) {
       
       write.table(
         tt$table,
-        paste0(out,'/dge_', exp_lbl[1], "--", ctrl_lbl[1], "--", cell_type, '.tsv'),
+        paste0(out,'/dge_', exp_lbl[1], "--", ctrl_lbl[1], "--", cell_type, "--", res , '.tsv'),
         sep = '\t', col.names=NA
       )
     }

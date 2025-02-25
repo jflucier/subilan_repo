@@ -11,6 +11,7 @@ import subprocess
 import sys
 import csv
 import random
+from pathlib import Path
 
 import matplotlib
 import numpy as np
@@ -18,7 +19,9 @@ import scanpy as sc
 import anndata as ad
 import pandas as pd
 import seaborn as sns
+import seaborn.objects as so
 import pertpy as pt
+import decoupler
 
 from matplotlib import pyplot as plt
 from matplotlib.pyplot import rc_context
@@ -39,6 +42,8 @@ from sccoda.model import other_models as om
 import celltypist
 from celltypist import models
 import sc_toolbox as sct
+from pydeseq2.dds import DeseqDataSet, DefaultInference
+from pydeseq2.ds import DeseqStats
 
 sc.settings.set_figure_params(dpi=80, facecolor="white")
 outpath = "/storage/Documents/service/externe/ilan/20241209_scRNAseq_FL_SA/out"
@@ -329,7 +334,7 @@ def run_qc(adata, outpath):
     adata.write(os.path.join(outpath, 'adata_quality_control.h5ad'))
     return adata
 
-def run_normalization(adata, outpath):
+def run_normalization(adata, outpath, write_h5ad=True):
     print("## Running Normalization")
     ## Normalization
     # Count depth scaling normalizes the data to a “size factor” such as
@@ -350,8 +355,9 @@ def run_normalization(adata, outpath):
     analytic_pearson = sc.experimental.pp.normalize_pearson_residuals(adata, inplace=False)
     adata.layers["analytic_pearson_residuals"] = csr_matrix(analytic_pearson["X"])
 
-    print("# Write resulting adata object to h5ad file")
-    adata.write(os.path.join(outpath, 'adata_normalisation.h5ad'))
+    if write_h5ad:
+        print("# Write resulting adata object to h5ad file")
+        adata.write(os.path.join(outpath, 'adata_normalisation.h5ad'))
     return adata
 
 def run_feature_selection(adata, outpath):
@@ -727,9 +733,15 @@ def run_annotation(adata, outpath, resolutions, markers):
     return adata
 
 def output_dge_qc(adata_pb, outpath):
+    print(f"Ouputting DGE QC in {outpath}/dge_report_PCA_QC.pdf")
     adata_pb.layers['counts'] = adata_pb.X.copy()
-    sc.pp.normalize_total(adata_pb, target_sum=1e6)
-    sc.pp.log1p(adata_pb)
+
+    # sc.pp.normalize_total(adata_pb, target_sum=1e6)
+    # sc.pp.log1p(adata_pb)
+    adata_pb.X = adata_pb.X.astype(np.int64)
+    adata_pb = run_normalization(adata_pb, outpath, write_h5ad=False)
+    adata_pb.X = adata_pb.layers["analytic_pearson_residuals"]
+
     sc.pp.pca(adata_pb)
     adata_pb.obs["lib_size"] = np.sum(adata_pb.layers["counts"], axis=1)
     adata_pb.obs["log_lib_size"] = np.log(adata_pb.obs["lib_size"].astype(float))
@@ -749,10 +761,10 @@ def aggregate_and_filter(
     cell_identity_key="cell_type",
     obs_to_keep=[],  # which additional metadata to keep, e.g. gender, age, etc.
     replicates_per_patient=3,
+    NUM_OF_CELL_PER_DONOR=30
 ):
-    NUM_OF_CELL_PER_DONOR = 10
+
     # subset adata to the given cell identity
-    adata.obs[cell_identity_key]
     adata_cell_pop = adata[adata.obs[cell_identity_key] == cell_identity].copy()
     # check which donors to keep according to the number of cells specified with NUM_OF_CELL_PER_DONOR
     size_by_donor = adata_cell_pop.obs.groupby([donor_key]).size()
@@ -762,8 +774,8 @@ def aggregate_and_filter(
         if size_by_donor[donor] <= NUM_OF_CELL_PER_DONOR
     ]
     if len(donors_to_drop) > 0:
-        print("Dropping the following samples:")
-        print(donors_to_drop)
+        print(f"Dropping the following samples (# of cells <= {NUM_OF_CELL_PER_DONOR}):")
+        print(f"{donors_to_drop}: {size_by_donor[donors_to_drop]}")
     df = pd.DataFrame(columns=[*adata_cell_pop.var_names, *obs_to_keep])
 
     adata_cell_pop.obs[donor_key] = adata_cell_pop.obs[donor_key].astype("category")
@@ -797,26 +809,8 @@ def aggregate_and_filter(
     )
     return adata_cell_pop
 
-def plot_heatmap(pdf, adata, group_key, group_name="cell_type", groupby="label", LOG_FOLD_CHANGE=1.0, FDR=0.05):
-    cell_type = group_key.rsplit("-", 1)[1]
-    res = sc.get.rank_genes_groups_df(adata, group=cell_type, key=group_key)
-    res.index = res["names"].values
-    res = res[
-        (res["pvals_adj"] < FDR) & (abs(res["logfoldchanges"]) > LOG_FOLD_CHANGE)
-    ].sort_values(by=["logfoldchanges"])
-    print(f"Plotting {len(res)} genes...")
-    markers = list(res.index)
-    sc.pl.heatmap(
-        adata[adata.obs[group_name] == cell_type].copy(),
-        markers,
-        groupby=groupby,
-        swap_axes=True,
-        show=False
-    )
-    pdf.savefig(bbox_inches="tight")
-
-def volcano_plot(pdf, adata, group_key, group_name="cell_type", groupby="label", title=None, LOG_FOLD_CHANGE=1.0, FDR=0.05):
-    cell_type = group_key.rsplit("-", 1)[1]
+def volcano_plot(pdf, adata, group_key, title=None, LOG_FOLD_CHANGE=1.0, FDR=0.05):
+    cell_type = group_key.rsplit("--", 2)[1]
     result = sc.get.rank_genes_groups_df(adata, group=cell_type, key=group_key).copy()
     result["-logQ"] = -np.log(result["pvals_adj"].astype("float"))
     lowqval_de = result.loc[(result["pvals_adj"] <= FDR) & (abs(result["logfoldchanges"]) >= LOG_FOLD_CHANGE)]
@@ -864,63 +858,117 @@ def volcano_plot(pdf, adata, group_key, group_name="cell_type", groupby="label",
     fig.suptitle(title)
     pdf.savefig(fig, bbox_inches="tight")
 
-def run_dge(adata, outpath, resolutions, treat_group_regex, ctrl_group_regex):
-    print("## Running differential gene expression analysis")
-    dge_path = os.path.join(outpath, '06-DifferentialGeneExpression')
-    if not os.path.exists(dge_path):
-        os.makedirs(dge_path, exist_ok=True)
+def get_edger_annadata(dge_path, adata_dge, res, LOG_FOLD_CHANGE=1.0, FDR=0.05):
+    print("Associate edger results to anndata")
+    ctrl_group, treat_group = get_adata_sample_groups(adata_dge)
 
-    print(f"Preparing dge input files")
+    for i, cell_type in enumerate(adata_dge.obs[f"clustifyr_cell_label_{res}"].cat.categories[0:]):
+        for e in treat_group:
+            for c in ctrl_group:
+                rf = dge_path + '/dge_' + e + "--" + c + "--" + cell_type + f"--{res}.tsv"
+                print(f'Processing EdgeR results for {rf}')
+                if os.path.isfile(rf):
+                    print(f"Reading EdgeR result {rf}")
+                    edger_df = pd.read_csv(rf, sep="\t", index_col=0)
+                    edger_df["gene_symbol"] = edger_df.index
+                    edger_df[f"clustifyr_cell_label_{res}"] = cell_type
+                    # Calculate fcsign
+                    edger_df['fcsign'] = np.sign(edger_df['logFC'])  # Use np.sign for vectorized operation
+                    # Calculate logP
+                    edger_df['logP'] = -np.log10(edger_df['FDR'])
+                    # Calculate metric
+                    # edger_df['score'] = edger_df['logP'] / edger_df['fcsign']
+                    edger_df['score'] = np.where(edger_df['fcsign'] != 0, edger_df['logP'] / edger_df['fcsign'], 0)
+
+                    sct.tools.de_res_to_anndata(
+                        adata_dge,
+                        edger_df,
+                        groupby=f"clustifyr_cell_label_{res}",
+                        score_col="score",
+                        pval_col="PValue",
+                        pval_adj_col="FDR",
+                        lfc_col="logFC",
+                        key_added=f"edgeR--{e}--{c}--{cell_type}--{res}",
+                    )
+
+                else:
+                    print(f"EdgeR result {rf} does not exist")
+    return adata_dge
+
+def run_dge(adata, dge_path, res, treat_group_regex, ctrl_group_regex, LOG_FOLD_CHANGE=1.0, FDR=0.05):
+
+    print( f"## Running DGE for resolution {res}")
     adata_dge = adata.copy()
     adata_dge.layers["counts"] = adata_dge.layers["soupX_counts"]
 
-    adata_dge.obs["clustifyr_cell_label_0.1"] = [ct.replace(" ", "_") for ct in adata_dge.obs["clustifyr_cell_label_0.1"]]
-    adata_dge.obs["clustifyr_cell_label_0.1"] = [ct.replace("+", "") for ct in adata_dge.obs["clustifyr_cell_label_0.1"]]
-    adata_dge.obs["clustifyr_cell_label_0.1"] = [ct.replace("(", "") for ct in adata_dge.obs["clustifyr_cell_label_0.1"]]
-    adata_dge.obs["clustifyr_cell_label_0.1"] = [ct.replace(")", "") for ct in adata_dge.obs["clustifyr_cell_label_0.1"]]
+    adata_dge.obs[f"clustifyr_cell_label_{res}"] = [ct.replace(" ", "_") for ct in adata_dge.obs[f"clustifyr_cell_label_{res}"]]
+    adata_dge.obs[f"clustifyr_cell_label_{res}"] = [ct.replace("+", "")  for ct in adata_dge.obs[f"clustifyr_cell_label_{res}"]]
+    adata_dge.obs[f"clustifyr_cell_label_{res}"] = [ct.replace("(", "")  for ct in adata_dge.obs[f"clustifyr_cell_label_{res}"]]
+    adata_dge.obs[f"clustifyr_cell_label_{res}"] = [ct.replace(")", "")  for ct in adata_dge.obs[f"clustifyr_cell_label_{res}"]]
+    adata_dge.obs[f"clustifyr_cell_label_{res}"] = [ct.replace("-", "")  for ct in adata_dge.obs[f"clustifyr_cell_label_{res}"]]
 
     adata_dge.obs["sample"] = adata_dge.obs["sample"].astype("category")
-    adata_dge.obs["clustifyr_cell_label_0.1"] = adata_dge.obs["clustifyr_cell_label_0.1"].astype("category")
+    adata_dge.obs[f"clustifyr_cell_label_{res}"] = adata_dge.obs[f"clustifyr_cell_label_{res}"].astype("category")
 
     adata_dge.X = adata_dge.layers["counts"].copy()
-    obs_to_keep = ["clustifyr_cell_label_0.1", "sample"]
 
-    cell_type = adata_dge.obs["clustifyr_cell_label_0.1"].cat.categories[0]
+    # print("# Write resulting adata object to h5ad file for GSEA step")
+    # adata_dge.write(os.path.join(outpath, "adata_dge.h5ad"))
+
+    print("Generating pseudobulks for samples")
+    obs_to_keep = [f"clustifyr_cell_label_{res}", "sample"]
+    cell_type = adata_dge.obs[f"clustifyr_cell_label_{res}"].cat.categories[0]
     print(
-        f'Processing {cell_type} (1 out of {len(adata_dge.obs["clustifyr_cell_label_0.1"].cat.categories)})...'
+        f'Processing {cell_type} (1 out of {len(adata_dge.obs[f"clustifyr_cell_label_{res}"].cat.categories)})...'
     )
-    adata_pb = aggregate_and_filter(adata_dge, cell_type, cell_identity_key="clustifyr_cell_label_0.1", obs_to_keep=obs_to_keep)
-    for i, cell_type in enumerate(adata_dge.obs["clustifyr_cell_label_0.1"].cat.categories[1:]):
+    adata_pb = aggregate_and_filter(
+        adata_dge,
+        cell_type,
+        cell_identity_key=f"clustifyr_cell_label_{res}",
+        obs_to_keep=obs_to_keep,
+        replicates_per_patient=3,
+        NUM_OF_CELL_PER_DONOR=30
+    )
+    for i, cell_type in enumerate(adata_dge.obs[f"clustifyr_cell_label_{res}"].cat.categories[1:]):
         print(
-            f'Processing {cell_type} ({i + 2} out of {len(adata_dge.obs["clustifyr_cell_label_0.1"].cat.categories)})...'
+            f'Processing {cell_type} ({i + 2} out of {len(adata_dge.obs[f"clustifyr_cell_label_{res}"].cat.categories)})...'
         )
-        adata_cell_type = aggregate_and_filter(adata_dge, cell_type, cell_identity_key="clustifyr_cell_label_0.1", obs_to_keep=obs_to_keep)
+        adata_cell_type = aggregate_and_filter(
+            adata_dge,
+            cell_type,
+            cell_identity_key=f"clustifyr_cell_label_{res}",
+            obs_to_keep=obs_to_keep,
+            replicates_per_patient=3,
+            NUM_OF_CELL_PER_DONOR=30
+        )
         adata_pb = adata_pb.concatenate(adata_cell_type)
 
     adata_pb = output_dge_qc(adata_pb, dge_path)
 
+    print("Prepare Edger input files")
     counts_df = pd.DataFrame(
         adata_pb.X.T,  # Transpose here!
         index=adata_pb.var_names,  # Genes as rows
         columns=adata_pb.obs_names  # Cells as columns
     )
-    counts_df.to_csv(os.path.join(dge_path, 'edger_counts.tsv'), sep='\t')
+    counts_df.to_csv(os.path.join(dge_path, f'edger_counts.{res}.tsv'), sep='\t')
 
     # Export group information (important for edgeR)
     groups_df = pd.DataFrame(
         adata_pb.obs,  # Or whichever column defines your groups
         index=adata_pb.obs_names
     )
-    groups_df = groups_df.rename(columns={"clustifyr_cell_label_0.1": "cell_type"})
-    groups_df.to_csv(os.path.join(dge_path, 'edger_groups.tsv'), sep='\t')  # Save groups to tsv
+    groups_df = groups_df.rename(columns={f"clustifyr_cell_label_{res}": "cell_type"})
+    groups_df.to_csv(os.path.join(dge_path, f'edger_groups.{res}.tsv'), sep='\t')  # Save groups to tsv
 
     print("Running EdgeR")
     command = (
             "Rscript --vanilla "
             + os.path.join(os.path.dirname(__file__), '../R/run_edger.R ')
             + " -o " + dge_path
-            + " -m " + os.path.join(dge_path, 'edger_counts.tsv')
-            + " -g " + os.path.join(dge_path, 'edger_groups.tsv')
+            + f" -r {res}"
+            + " -m " + os.path.join(dge_path, f'edger_counts.{res}.tsv')
+            + " -g " + os.path.join(dge_path, f'edger_groups.{res}.tsv')
             + " -t " + treat_group_regex
             + " -c " + ctrl_group_regex
     )
@@ -932,61 +980,51 @@ def run_dge(adata, outpath, resolutions, treat_group_regex, ctrl_group_regex):
     else:
         print("EdgeR failed with return code", return_code)
 
-    sample = adata_dge.obs["sample"].cat.categories
-    ctrl_group = []
-    treat_group = []
 
-    for s in sample:
-        if re.search(ctrl_group_regex, s):
-            ctrl_group.append(s)
-        elif re.search(treat_group_regex, s):
-            treat_group.append(s)
-
-    with PdfPages(os.path.join(dge_path, f"dge_report_heatmaps.pdf"), ) as pdf:
-        for i, cell_type in enumerate(adata_dge.obs["clustifyr_cell_label_0.1"].cat.categories[0:]):
-            for e in treat_group:
-                for c in ctrl_group:
-                    rf = dge_path + '/dge_' + e + "--" + c + "--" + cell_type + '.tsv'
-                    print(f'Processing EdgeR results for {rf}')
-                    if os.path.isfile(rf):
-                        print(f"Reading EdgeR result {rf}")
-                        edger_df = pd.read_csv(rf, sep="\t", index_col=0)
-                        edger_df["gene_symbol"] = edger_df.index
-                        edger_df["clustifyr_cell_label_0.1"] = cell_type
-                        sct.tools.de_res_to_anndata(
-                            adata_dge,
-                            edger_df,
-                            groupby="clustifyr_cell_label_0.1",
-                            score_col="logCPM",
-                            pval_col="PValue",
-                            pval_adj_col="FDR",
-                            lfc_col="logFC",
-                            key_added=f"edgeR-{e}-{c}-{cell_type}",
-                        )
-                    else:
-                        print(f"EdgeR result {rf} does not exist")
-
-    adata_dge.X = adata_dge.layers["counts"].copy()
-    sc.pp.normalize_total(adata_dge, target_sum=1e6)
-    sc.pp.log1p(adata_dge)
+    adata_dge = get_edger_annadata(dge_path, adata_dge, res, LOG_FOLD_CHANGE, FDR)
+    # adata_dge.X = adata_dge.layers["counts"].copy()
+    # sc.pp.normalize_total(adata_dge, target_sum=1e6)
+    # sc.pp.log1p(adata_dge)
+    adata_dge = run_normalization(adata_dge, outpath, write_h5ad=False)
+    adata_dge.X = adata_dge.layers["analytic_pearson_residuals"]
 
     with PdfPages(os.path.join(dge_path, f"dge_report_volcanos.pdf")) as pdf:
-        for i, cell_type in enumerate(adata_dge.obs["clustifyr_cell_label_0.1"].cat.categories[0:]):
+        ctrl_group, treat_group = get_adata_sample_groups(adata_dge)
+        for i, cell_type in enumerate(adata_dge.obs[f"clustifyr_cell_label_{res}"].cat.categories[0:]):
             for e in treat_group:
                 for c in ctrl_group:
-                    volcano_plot(
-                        pdf,
-                        adata_dge,
-                        f"edgeR-{e}-{c}-{cell_type}",
-                        group_name="clustifyr_cell_label_0.1",
-                        groupby="sample",
-                        title=f"{e} vs {c} for {cell_type}"
-                    )
+                    rf = dge_path + '/dge_' + e + "--" + c + "--" + cell_type + f"--{res}.tsv"
+                    if os.path.isfile(rf):
+                        print(f"filtering EdgeR result edgeR--{e}--{c}--{cell_type}--{res}")
+                        edger_df = pd.read_csv(rf, sep="\t", index_col=0)
+                        edger_df["gene_symbol"] = edger_df.index
+                        edger_df[f"clustifyr_cell_label_{res}"] = cell_type
+                        # output tsv of filter edger results
+                        filtered_df = edger_df.loc[
+                            (edger_df["FDR"] <= FDR) & (abs(edger_df["logFC"]) >= LOG_FOLD_CHANGE)
+                        ]
+                        filtered_df.to_csv(
+                            os.path.join(dge_path + '/dge_' + e + "--" + c + "--" + cell_type + f"--{res}.filtered.tsv"),
+                            sep="\t",
+                            index=True
+                        )
+
+                        print(f"generate volcano plot for edgeR--{e}--{c}--{cell_type}--{res}")
+                        volcano_plot(
+                            pdf,
+                            adata_dge,
+                            f"edgeR--{e}--{c}--{cell_type}--{res}",
+                            title=f"{e} vs {c} for {cell_type} for resolution {res}",
+                            LOG_FOLD_CHANGE=LOG_FOLD_CHANGE,
+                            FDR=FDR
+                        )
+                    else:
+                        print(f"No volcano plot produced for edgeR--{e}--{c}--{cell_type}--{res}. Some group were dropped. Skipping.")
 
     print("done dge")
     return adata_dge
 
-def run_composition(adata, outpath, resolutions):
+def run_composition(adata, outpath, res, FDR=0.05):
     print("## Running compositional analysis")
     comp_path = os.path.join(outpath, '07-CellComposition')
     if not os.path.exists(comp_path):
@@ -995,14 +1033,16 @@ def run_composition(adata, outpath, resolutions):
     adata_comp = adata.copy()
     data_sc = dat.from_scanpy(
         adata_comp,
-        cell_type_identifier="clustifyr_cell_label_0.1",
+        cell_type_identifier=f"clustifyr_cell_label_{res}",
         sample_identifier="sample"
     )
 
+    print("Generate CompositionalAnalysis model")
     data_sc.obs["condition"] = data_sc.obs.index
     model_all = mod.CompositionalAnalysis(data_sc, formula="condition", reference_cell_type="automatic")
+    print("Run Hamiltonian Monte Carlo (HMC) sampling")
     all_results = model_all.sample_hmc()
-    (intercept_df,effect_df) = all_results.summary_prepare(est_fdr=0.05)
+    (intercept_df,effect_df) = all_results.summary_prepare(est_fdr=FDR)
     effect_df.to_csv(os.path.join(comp_path, 'comp_effect.tsv'), sep="\t", header=True)
     intercept_df.to_csv(os.path.join(comp_path, 'comp_intercept.tsv'), sep="\t", header=True)
 
@@ -1042,9 +1082,10 @@ def run_composition(adata, outpath, resolutions):
         # )
         # pdf.savefig(bbox_inches="tight")
 
-    print("done")
+    ### milo not working since only having 1N per sample
+    ### investigate later
 
-    ### not workinfg since only having 1N per sample
+    ### rework this part when more N available
     # adata_comp.obs["condition"] = adata_comp.obs["sample"]
     # # adata_comp.obs["sample"] = "T"
     # milo = pt.tl.Milo()
@@ -1065,97 +1106,290 @@ def run_composition(adata, outpath, resolutions):
     # )
     # # milo_results_salmonella = mdata["milo"].obs.copy()
     # # milo_results_salmonella
-    #
-    # milo.build_nhood_graph(mdata)
-    # with matplotlib.rc_context({"figure.figsize": [10, 10]}):
-    #     milo.plot_nhood_graph(mdata, alpha=0.1, min_size=5, plot_edges=False)
-    #     sc.pl.umap(mdata["rna"], color="clustifyr_cell_label_0.1", legend_loc="on data")
-    #
-    # with PdfPages(os.path.join(comp_path, f"compositional_analysis_report.pdf")) as pdf:
-    #     sc.pl.umap(adata_comp, color=["sample", "clustifyr_cell_label_0.1"], ncols=2, wspace=0.25, show=False)
-    #     pdf.savefig(bbox_inches="tight")
-    #
-    #     nhood_size = adata_comp.obsm["nhoods"].toarray().sum(0)
-    #     fig, ax = plt.subplots(1, 1, figsize=(10, 5))
-    #     ax.hist(nhood_size, bins=20)
-    #     ax.set_xlabel("# cells in neighbourhood")
-    #     ax.set_ylabel("# neighbouthoods")
-    #     pdf.savefig(bbox_inches="tight")
-    #
-    #     mean_n_cells = mdata["milo"].X.toarray().mean(0)
-    #     fig, ax = plt.subplots(1, 1, figsize=(10, 5))
-    #     ax.plot(nhood_size, mean_n_cells, ".")
-    #     ax.set_xlabel("# cells in nhood")
-    #     ax.set_ylabel("Mean # cells per sample in nhood")
-    #     pdf.savefig(bbox_inches="tight")
 
+    print("# Write resulting adata object to h5ad file")
+    adata.write(os.path.join(outpath, "adata_composition.h5ad"))
 
+    print("done")
+    return data_sc
 
+def gmt_to_decoupler(pth) -> pd.DataFrame:
+    """Parse a gmt file to a decoupler pathway dataframe."""
+    from itertools import chain, repeat
 
-        ### not needed
-        # adata_scvi = adata_comp[:, adata_comp.var["highly_variable"]].copy()
-        # scvi.model.SCVI.setup_anndata(adata_scvi, layer="counts", batch_key="sample")
-        # model_scvi = scvi.model.SCVI(adata_scvi)
-        # max_epochs_scvi = int(np.min([round((20000 / adata.n_obs) * 400), 400]))
-        # model_scvi.train(max_epochs=max_epochs_scvi)
-        # adata_comp.obsm["X_scVI"] = model_scvi.get_latent_representation()
-        # sc.pp.neighbors(adata_comp, use_rep="X_scVI")
-        # sc.tl.umap(adata_comp)
-        # sc.pl.umap(adata_comp, color=["sample", "clustifyr_cell_label_0.1"], ncols=3, wspace=0.25, show=False)
-        # pdf.savefig(bbox_inches="tight")
+    pathways = {}
 
+    with Path(pth).open("r") as f:
+        for line in f:
+            name, _, *genes = line.strip().split("\t")
+            pathways[name] = genes
 
+    return pd.DataFrame.from_records(
+        chain.from_iterable(zip(repeat(k), v) for k, v in pathways.items()),
+        columns=["geneset", "genesymbol"],
+    )
 
-    # sccoda_model = pt.tl.Sccoda()
-    # sccoda_data = sccoda_model.load(
-    #     adata,
-    #     type="cell_level",
-    #     generate_sample_level=True,
-    #     cell_type_identifier="clustifyr_cell_label_0.1",
-    #     sample_identifier="sample",
-    #     covariate_obs=["sample"],
-    # )
-    #
-    # with PdfPages(os.path.join(comp_path, f"compositional_analysis_report.pdf")) as pdf:
-    #     sccoda_model.plot_boxplots(
-    #         sccoda_data,
-    #         modality_key="coda",
-    #         feature_name="sample",
-    #         figsize=(20, 10),
-    #         add_dots=True,
-    #         show=False,
-    #     )
-    #     pdf.savefig(bbox_inches="tight")
-    #
-    #     sccoda_model.plot_stacked_barplot(
-    #         sccoda_data, modality_key="coda", feature_name="sample", figsize=(20, 10), show=False,
-    #     )
-    #     pdf.savefig(bbox_inches="tight")
-    #
-    #     ### problem with not enough cells i think #####
-    #
-    #     # sccoda_data = sccoda_model.prepare(
-    #     #     sccoda_data,
-    #     #     modality_key="coda",
-    #     #     formula="sample",
-    #     #     reference_cell_type="automatic",
-    #     # )
-    #     # sccoda_model.run_nuts(sccoda_data, modality_key="coda", rng_key=1234)
-    #     # sccoda_model.set_fdr(sccoda_data, 0.2)
-    #     # sccoda_model.credible_effects(sccoda_data, modality_key="coda")
-    #     # sccoda_model.plot_effects_barplot(
-    #     #     sccoda_data,
-    #     #     modality_key="coda",
-    #     #     covariates=["sample"],
-    #     #     plot_facets=False,
-    #     #     plot_zero_cell_type=True,
-    #     #     plot_zero_covariate=True,
-    #     #     show=False
-    #     # )
-    #     # pdf.savefig(bbox_inches="tight")
+def run_gsea(adata_dge, outpath, dge_path, resolutions, treat_group_regex, ctrl_group_regex):
+    print("## Running GSEA analysis")
+    gsea_path = os.path.join(outpath, '08-FunctionnalEnrichment')
+    if not os.path.exists(gsea_path):
+        os.makedirs(gsea_path, exist_ok=True)
 
+    # Storing the counts for later use
+    adata_gsea = adata_dge.copy()
+    print("# populate adata with edger results")
+    adata_gsea = get_edger_annadata(dge_path, adata_gsea, treat_group_regex, ctrl_group_regex)
 
+    # adata_gsea.layers["counts"] = adata_gsea.layers["soupX_counts"].X.copy()
+    # # Renaming label to condition
+    print("# normalise data")
+    adata_gsea.obs = adata_gsea.obs.rename({"sample": "condition"}, axis=1)
+    # sc.pp.normalize_total(adata_gsea, target_sum=1e6)
+    # sc.pp.log1p(adata_gsea)
+    adata_gsea = run_normalization(adata_gsea, outpath, write_h5ad=False)
+    adata_gsea.X = adata_gsea.layers["analytic_pearson_residuals"]
 
+    ctrl_group, treat_group = get_adata_sample_groups(adata_dge)
+    for i, cell_type in enumerate(adata_gsea.obs["clustifyr_cell_label_0.1"].cat.categories[0:]):
+        for e in treat_group:
+            for c in ctrl_group:
+                if f"edgeR--{e}--{c}--{cell_type}" not in adata_gsea.uns.keys():
+                    continue
+
+                # cell_type = "DC_DC.8"
+                # e = "FL_T"
+                # c = "V_T"
+                # celltype_condition = f"FL_T_{cell_type}"
+                d = sc.get.rank_genes_groups_df(adata_gsea, group=cell_type, key=f"edgeR--{e}--{c}--{cell_type}")
+
+                t_stats = (
+                    # Get dataframe of DE results for condition vs. rest
+                    d
+                    # Subset to highly variable genes
+                    .set_index("names")
+                    .loc[adata_gsea.var["highly_variable"]]
+                    # Sort by absolute score
+                    .sort_values("scores", key=np.abs, ascending=False)[
+                        # Format for decoupler
+                        ["scores"]
+                    ]
+                    #.rename_axis([f"{e}--{c}--{cell_type}"], axis=1)
+                )
+                # print(t_stats)
+
+                # downloaded from https://www.gsea-msigdb.org/gsea/downloads.jsp
+                reactome = gmt_to_decoupler(
+                    os.path.join(
+                        os.path.dirname(__file__),
+                        '../include/msigdb_v2024.1.Mm_files_to_download_locally/msigdb_v2024.1.Mm_GMTs/m2.cp.reactome.v2024.1.Mm.symbols.gmt'
+                    )
+                )
+                # Filter duplicates
+                reactome = reactome[~reactome.duplicated(("geneset", "genesymbol"))]
+                # Rename
+                reactome.loc[:, 'geneset'] = [name.split('REACTOME_')[1] for name in reactome['geneset']]
+                reactome = reactome.set_index('geneset', drop=False)
+                reactome = reactome.rename_axis(None)
+
+                # Filtering genesets to match behaviour of fgsea
+                geneset_size = reactome.groupby("geneset").size()
+                gsea_genesets = geneset_size.index[(geneset_size > 15) & (geneset_size < 500)]
+
+                scores, norm, pvals = decoupler.run_gsea(
+                    t_stats.T,
+                    reactome[reactome["geneset"].isin(gsea_genesets)],
+                    source="geneset",
+                    target="genesymbol",
+                )
+
+                gsea_results = (
+                    pd.concat({"score": scores.T, "norm": norm.T, "pval": pvals.T}, axis=1)
+                    .droplevel(level=1, axis=1)
+                    .sort_values("pval")
+                )
+
+                gsea_results.to_csv(os.path.join(gsea_path, f"{e}--{c}--{cell_type}.gsea.tsv"), sep="\t")
+
+                p = (
+                    so.Plot(
+                        data=(
+                            gsea_results.head(20).assign(
+                                **{"-log10(pval)": lambda x: -np.log10(x["pval"])}
+                            ).rename_axis(index="Pathway")
+                        ),
+                        x="-log10(pval)",
+                        y="Pathway",
+                    ).add(so.Bar())
+                )
+                p.save(os.path.join(gsea_path, f"{e}--{c}--{cell_type}.gsea.pdf"),bbox_inches="tight")
+
+                results_df = sc.get.rank_genes_groups_df(adata_gsea, group=cell_type, key=f"edgeR--{e}--{c}--{cell_type}")
+                results_df = results_df.set_index('names', drop=False)
+                results_df = results_df.rename_axis(None)
+                # Infer enrichment with ora using significant deg
+                top_genes = results_df[results_df['pvals_adj'] < 0.05]
+                top_genes.set_index(["names"], inplace=True)
+
+                # Run ora
+                enr_pvals = decoupler.get_ora_df(
+                    df=top_genes,
+                    net=reactome[reactome["geneset"].isin(gsea_genesets)],
+                    source='geneset',
+                    target='genesymbol',
+                    verbose=True
+                ).sort_values('Combined score', ascending=False)
+
+                enr_pvals.to_csv(os.path.join(gsea_path, f"{e}--{c}--{cell_type}.ora.tsv"), sep="\t")
+
+                # print(enr_pvals.head())
+                if not enr_pvals.empty:
+                    with PdfPages(os.path.join(gsea_path, f"{e}--{c}--{cell_type}.ora.pdf")) as pdf:
+                        decoupler.plot_dotplot(
+                            enr_pvals.head(15),
+                            x='Combined score',
+                            y='Term',
+                            s='Odds ratio',
+                            c='FDR p-value',
+                            scale=0.3,
+                            figsize=(3, 9),
+                            title=f"{e}--{c}--{cell_type}",
+                        )
+                        pdf.savefig(bbox_inches="tight")
+
+                        for term in enr_pvals['Term'].head(15):
+                            results_df['scores'] = pd.to_numeric(results_df['scores'], errors='coerce')
+                            decoupler.plot_running_score(
+                                df=results_df,
+                                stat='scores',
+                                net=reactome,
+                                source='geneset',
+                                target='genesymbol',
+                                set_name=term
+                            )
+                            pdf.savefig(bbox_inches="tight")
+
+                else:
+                    print(f"No ORA returned for celltype {cell_type}")
+
+def run_dge_deseq(adata, outpath, resolutions, treat_group_regex, ctrl_group_regex):
+    print("## Running differential gene expression analysis")
+    dge_path = os.path.join(outpath, '06-DifferentialGeneExpression')
+    if not os.path.exists(dge_path):
+        os.makedirs(dge_path, exist_ok=True)
+
+    print(f"Preparing dge input files")
+    adata_dge = adata.copy()
+    # adata_dge.layers["counts"] = adata_dge.layers["soupX_counts"]
+    # adata_dge.layers["counts"] = adata_dge.X
+    adata_dge.obs.rename(columns={'clustifyr_cell_label_0.1': 'clustifyr_cell_label_0_1'}, inplace=True)
+    # Get pseudo-bulk profile
+    pdata = decoupler.get_pseudobulk(
+        adata_dge,
+        sample_col='sample',
+        groups_col='clustifyr_cell_label_0_1',
+        layer='counts',
+        mode='sum',
+        min_cells=10,
+        min_counts=1000
+    )
+
+    with PdfPages(os.path.join(dge_path, f"dge_report_deseq.pdf"), ) as pdf:
+        f = decoupler.plot_psbulk_samples(
+            pdata,
+            groupby=['sample', 'clustifyr_cell_label_0_1'],
+            figsize=(12, 4),
+            return_fig=True,
+        )
+        pdf.savefig(f, bbox_inches="tight")
+
+        # Store raw counts in layers
+        pdata.layers['counts'] = pdata.X.copy()
+
+        # Normalize, scale and compute pca
+        sc.pp.normalize_total(pdata, target_sum=1e4)
+        sc.pp.log1p(pdata)
+        sc.pp.scale(pdata, max_value=10)
+        sc.pp.pca(pdata)
+
+        # Return raw counts to X
+        decoupler.swap_layer(pdata, 'counts', X_layer_key=None, inplace=True)
+        sc.pl.pca(pdata, color=['sample', 'clustifyr_cell_label_0_1'], ncols=1, size=300, show=False)
+        pdf.savefig(bbox_inches="tight")
+        sc.pl.pca_variance_ratio(pdata, show=False)
+        pdf.savefig(bbox_inches="tight")
+
+        decoupler.get_metadata_associations(
+            pdata,
+            obs_keys = ['sample', 'clustifyr_cell_label_0_1', 'psbulk_n_cells', 'psbulk_counts'],
+            obsm_key='X_pca',  # Where the PCs are stored
+            uns_key='pca_anova',  # Where the results are stored
+            inplace=True,
+        )
+
+        f = decoupler.plot_associations(
+            pdata,
+            uns_key='pca_anova',  # Summary statistics from the anova tests
+            obsm_key='X_pca',  # where the PCs are stored
+            stat_col='p_adj',  # Which summary statistic to plot
+            obs_annotation_cols=['sample', 'clustifyr_cell_label_0_1'],  # which sample annotations to plot
+            titles=['Principle component scores', 'Adjusted p-values from ANOVA'],
+            figsize=(7, 5),
+            n_factors=10,
+            return_fig=True,
+        )
+        pdf.savefig(f, bbox_inches="tight")
+
+        for i, cell_type in enumerate(adata_dge.obs["clustifyr_cell_label_0_1"].cat.categories):
+            print(f'Processing {cell_type}')
+            cells = pdata[pdata.obs['clustifyr_cell_label_0_1'] == cell_type].copy()
+            f = decoupler.plot_filter_by_expr(
+                cells,
+                group='sample',
+                min_count=10,
+                min_total_count=15,
+                return_fig=True
+            )
+            plt.gca().set_title(f'{cell_type}')
+            pdf.savefig(f, bbox_inches="tight")
+
+            # Obtain genes that pass the thresholds
+            genes = decoupler.filter_by_expr(cells, group='sample', min_count=10, min_total_count=15)
+            # Filter by these genes
+            cells = cells[:, genes].copy()
+
+            inference = DefaultInference(n_cpus=8)
+            dds = DeseqDataSet(
+                adata=cells,
+                design="~sample",
+                refit_cooks=True,
+                inference=inference,
+            )
+
+            # Compute LFCs
+            dds.deseq2()
+            # Extract contrast between COVID-19 vs normal
+            stat_res = DeseqStats(
+                dds,
+                contrast=['sample', 'FL_T', 'V_T'],
+                inference=inference,
+            )
+
+            stat_res.summary()
+
+def get_adata_sample_groups(adata):
+    sample = adata.obs["sample"].cat.categories
+    ctrl_group = []
+    treat_group = []
+
+    for s in sample:
+        if re.search(ctrl_group_regex, s):
+            ctrl_group.append(s)
+        elif re.search(treat_group_regex, s):
+            treat_group.append(s)
+        else:
+            print(f"Urecongnised group {s} using regex {ctrl_group_regex} or regex {treat_group_regex}")
+
+    return ctrl_group, treat_group
 
 def main(samples, outpath, resolutions, markers, treat_group_regex, ctrl_group_regex):
     print("Starting")
@@ -1169,22 +1403,33 @@ def main(samples, outpath, resolutions, markers, treat_group_regex, ctrl_group_r
     #
     # # adata = sc.read_h5ad(os.path.join(outpath, "adata_quality_control.h5ad"))
     # adata = run_normalization(adata, outpath)
-    #
-    # # adata = sc.read_h5ad(os.path.join(outpath, "adata_normalisation.h5ad"))
+    # #
+    # # # adata = sc.read_h5ad(os.path.join(outpath, "adata_normalisation.h5ad"))
     # adata = run_feature_selection(adata, outpath)
-    #
-    # # adata = sc.read_h5ad(os.path.join(outpath, "adata_feature_selection.h5ad"))
+    # #
+    # # # adata = sc.read_h5ad(os.path.join(outpath, "adata_feature_selection.h5ad"))
     # adata = run_dim_reduction(adata, outpath)
-    #
-    # # adata = sc.read_h5ad(os.path.join(outpath, "adata_dimensionality_reduction.h5ad"))
+    # #
+    # # # adata = sc.read_h5ad(os.path.join(outpath, "adata_dimensionality_reduction.h5ad"))
     # adata = run_clustering(adata, outpath, resolutions)
-    #
-    # # adata = sc.read_h5ad(os.path.join(outpath, "adata_clustering.h5ad"))
+    # #
+    # # # adata = sc.read_h5ad(os.path.join(outpath, "adata_clustering.h5ad"))
     # adata = run_annotation(adata, outpath, resolutions, markers)
 
     adata = sc.read_h5ad(os.path.join(outpath, "adata_annotation.h5ad"))
-    # adata_dge = run_dge(adata, outpath, resolutions, treat_group_regex, ctrl_group_regex)
-    adata = run_composition(adata, outpath, resolutions)
+    print("## Running differential gene expression analysis")
+    dge_path = os.path.join(outpath, '06-DifferentialGeneExpression')
+    if not os.path.exists(dge_path):
+        os.makedirs(dge_path, exist_ok=True)
+
+    for res in resolutions:
+        adata_dge = run_dge(adata, dge_path, res, treat_group_regex, ctrl_group_regex)
+        # # adata_dge = run_dge_deseq(adata, outpath, resolutions, treat_group_regex, ctrl_group_regex)
+
+        adata_sc = run_composition(adata, outpath, res)
+
+        # adata_dge = sc.read_h5ad(os.path.join(outpath, "adata_dge.h5ad"))
+        adata_gsea = run_gsea(adata_dge, outpath, dge_path, resolutions, treat_group_regex, ctrl_group_regex)
 
     print("Done")
 
@@ -1201,7 +1446,8 @@ treat_group_regex = "FL"
 ctrl_group_regex = "V"
 
 # leiden resolutions to process
-resolutions = [0.10, 0.25, 0.50, 1.00]
+# resolutions = [0.10, 0.25, 0.50, 1.00]
+resolutions = [0.10]
 
 ## Marker gene set
 marker_genes = {
@@ -1221,6 +1467,24 @@ marker_genes = {
 main(samples, outpath, resolutions, marker_genes, treat_group_regex, ctrl_group_regex)
 
 
+# def plot_heatmap(pdf, adata, group_key, group_name="cell_type", groupby="label", LOG_FOLD_CHANGE=1.0, FDR=0.05):
+#     cell_type = group_key.rsplit("-", 1)[1]
+#     res = sc.get.rank_genes_groups_df(adata, group=cell_type, key=group_key)
+#     res.index = res["names"].values
+#     res = res[
+#         (res["pvals_adj"] < FDR) & (abs(res["logfoldchanges"]) > LOG_FOLD_CHANGE)
+#     ].sort_values(by=["logfoldchanges"])
+#     print(f"Plotting {len(res)} genes...")
+#     markers = list(res.index)
+#     sc.pl.heatmap(
+#         adata[adata.obs[group_name] == cell_type].copy(),
+#         markers,
+#         groupby=groupby,
+#         swap_axes=True,
+#         show=False
+#     )
+#     pdf.savefig(bbox_inches="tight")
+#
 
 
 # ## Manual cell-type annotation
