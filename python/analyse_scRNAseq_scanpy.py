@@ -513,26 +513,26 @@ def run_celltypist_annotation(adata, ann_path, res):
     # make .X dense instead of sparse, for compatibility with celltypist:
     adata_celltypist.X = adata_celltypist.X.toarray()
 
+    #### run this part to get models ####
     # print("Download celltypist models if not downloaded already: Immune_All_Low.pkl and Immune_All_High.pkl")
     # models.download_models(
     #     force_update=True, model=["Immune_All_Low.pkl", "Immune_All_High.pkl"]
     # )
-
-    print("Load models")
-    model_low = models.Model.load(
-        model=os.path.join(
-            os.path.dirname(__file__),
-            '../include/Immune_All_Low.mouse.pkl'
-        )
-    )
+    # print("Load models")
+    # model_low = models.Model.load(
+    #     model=os.path.join(
+    #         os.path.dirname(__file__),
+    #         '../include/Immune_All_Low.mouse.pkl'
+    #     )
+    # )
     # model_low.convert()
     # model_low.write(os.path.join(ann_path, 'Immune_All_Low.mouse.pkl'))
-    model_high = models.Model.load(
-        model=os.path.join(
-            os.path.dirname(__file__),
-            '../include/Immune_All_High.mouse.pkl'
-        )
-    )
+    # model_high = models.Model.load(
+    #     model=os.path.join(
+    #         os.path.dirname(__file__),
+    #         '../include/Immune_All_High.mouse.pkl'
+    #     )
+    # )
     # model_high.convert()
     # model_high.write(os.path.join(ann_path, 'Immune_All_High.mouse.pkl'))
 
@@ -543,7 +543,13 @@ def run_celltypist_annotation(adata, ann_path, res):
     cl_coarse = f"celltypist_cell_label_coarse_{res}"
     cs_coarse = f"celltypist_conf_score_coarse_{res}"
     predictions_high = celltypist.annotate(
-        adata_celltypist, model=os.path.join(ann_path, 'Immune_All_High.mouse.pkl'), majority_voting=True, over_clustering=f"leiden_{res}"
+        adata_celltypist,
+        model=os.path.join(
+            os.path.dirname(__file__),
+            '../include/Immune_All_High.mouse.pkl'
+        ),
+        majority_voting=True,
+        over_clustering=f"leiden_{res}"
     )
     predictions_high_adata = predictions_high.to_adata()
 
@@ -560,7 +566,13 @@ def run_celltypist_annotation(adata, ann_path, res):
     cl_fine = f"celltypist_cell_label_fine_{res}"
     cs_fine = f"celltypist_conf_score_fine_{res}"
     predictions_low = celltypist.annotate(
-        adata_celltypist, model=os.path.join(ann_path, 'Immune_All_Low.mouse.pkl'), majority_voting=True, over_clustering=f"leiden_{res}"
+        adata_celltypist,
+        model=os.path.join(
+            os.path.dirname(__file__),
+            '../include/Immune_All_Low.mouse.pkl'
+        ),
+        majority_voting=True,
+        over_clustering=f"leiden_{res}"
     )
     predictions_low_adata = predictions_low.to_adata()
     adata.obs[f"celltypist_cell_label_fine_{res}"] = predictions_low_adata.obs.loc[
@@ -571,7 +583,6 @@ def run_celltypist_annotation(adata, ann_path, res):
     ]
     all_keys.append(cl_fine)
     all_keys.append(cs_fine)
-
 
     output_annotation_qc(
         adata,
