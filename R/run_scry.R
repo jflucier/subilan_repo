@@ -41,7 +41,7 @@ binomial_deviance <- devianceFeatureSelection(adata$T$X)
 
 idx <- tail(sort(binomial_deviance, index.return = TRUE)$ix,2000)
 
-mask = np$zeros(adata$var_names$shape, dtype=np$bool)
+mask = np$zeros(adata$var_names$shape, dtype=np$bool_)
 mask[idx] = TRUE
 
 print(paste0("Outputting results in ",out))
