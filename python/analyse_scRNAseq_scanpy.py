@@ -513,18 +513,28 @@ def run_celltypist_annotation(adata, ann_path, res):
     # make .X dense instead of sparse, for compatibility with celltypist:
     adata_celltypist.X = adata_celltypist.X.toarray()
 
-    print("Download celltypist models if not downloaded already: Immune_All_Low.pkl and Immune_All_High.pkl")
-    models.download_models(
-        force_update=True, model=["Immune_All_Low.pkl", "Immune_All_High.pkl"]
-    )
+    # print("Download celltypist models if not downloaded already: Immune_All_Low.pkl and Immune_All_High.pkl")
+    # models.download_models(
+    #     force_update=True, model=["Immune_All_Low.pkl", "Immune_All_High.pkl"]
+    # )
 
     print("Load models")
-    model_low = models.Model.load(model="Immune_All_Low.pkl")
-    model_low.convert()
-    model_low.write(os.path.join(ann_path, 'Immune_All_Low.mouse.pkl'))
-    model_high = models.Model.load(model="Immune_All_High.pkl")
-    model_high.convert()
-    model_high.write(os.path.join(ann_path, 'Immune_All_High.mouse.pkl'))
+    model_low = models.Model.load(
+        model=os.path.join(
+            os.path.dirname(__file__),
+            '../include/Immune_All_Low.mouse.pkl'
+        )
+    )
+    # model_low.convert()
+    # model_low.write(os.path.join(ann_path, 'Immune_All_Low.mouse.pkl'))
+    model_high = models.Model.load(
+        model=os.path.join(
+            os.path.dirname(__file__),
+            '../include/Immune_All_High.mouse.pkl'
+        )
+    )
+    # model_high.convert()
+    # model_high.write(os.path.join(ann_path, 'Immune_All_High.mouse.pkl'))
 
     all_keys = []
     # for res in resolutions:
