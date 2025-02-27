@@ -8,6 +8,7 @@
 
 suppressPackageStartupMessages(library("optparse"))
 suppressPackageStartupMessages(library("edgeR"))
+suppressPackageStartupMessages(library(stringr))
 # suppressPackageStartupMessages(library("MAST"))
 
 fit_model <- function(c_data,g_data){
@@ -42,7 +43,6 @@ option_list <- list(
   make_option(c("-m", "--count_tsv"), type="character", default=NULL, help="Count tsv matrix", metavar="character"),
   make_option(c("-g", "--groups"), type="character", default=NULL, help="Groups tsv", metavar="character"),
   make_option(c("-r", "--res"), type="character", default=NULL, help="Leiden resolution", metavar="character"),
-  make_option(c("-t", "--treated_regex"), type="character", default=NULL, help="treated group selection regex", metavar="character"),
   make_option(c("-c", "--ctrl_regex"), type="character", default=NULL, help="control group selection regex", metavar="character")
 );
 
@@ -53,14 +53,14 @@ out <- opt$outpath
 counts <- opt$count_tsv
 groups <- opt$groups
 res <- opt$res
-exp_regex <- opt$treated_regex
 ctrl_regex <- opt$ctrl_regex
 
-# counts <- "/storage/Documents/service/externe/ilan/20241209_scRNAseq_FL_SA/out/06-DifferentialGeneExpression/edger_counts.tsv"
-# groups <- "/storage/Documents/service/externe/ilan/20241209_scRNAseq_FL_SA/out/06-DifferentialGeneExpression/edger_groups.tsv"
-# out <- "/storage/Documents/service/externe/ilan/20241209_scRNAseq_FL_SA/out/06-DifferentialGeneExpression"
-# exp_regex <- "FL"
-# ctrl_regex <- "V"
+# counts <- "/storage/Documents/service/externe/ilan/20241209_scRNAseq_FL_SA/out/T_analysis/06-resolution_0.25/07-DifferentialGeneExpression/edger_counts.0.25.tsv"
+# groups <- "/storage/Documents/service/externe/ilan/20241209_scRNAseq_FL_SA/out/T_analysis/06-resolution_0.25/07-DifferentialGeneExpression/edger_groups.0.25.tsv"
+# out <- "/storage/Documents/service/externe/ilan/20241209_scRNAseq_FL_SA/out/T_analysis/06-resolution_0.1/07-DifferentialGeneExpression"
+# ctrl_regex <- "V_T"
+# res <- "0.25"
+# out <- "/storage/Documents/service/externe/ilan/20241209_scRNAseq_FL_SA/out/T_analysis/06-resolution_0.25/07-DifferentialGeneExpression/"
 
 
 print(paste0("out_path=",out))
@@ -103,8 +103,17 @@ design_names <- colnames(y$design)
 for (cell_type in unique(g_data$cell_type)) {
   print(cell_type)
   print(paste0("### Cell type: ", cell_type, " ###"))
-  exp_names <- design_names[grepl(paste0("^group",exp_regex,"_.*",cell_type,"$"), colnames(y$design), perl = TRUE)] #No need for the * as you want anything that contains "FL_T"
-  ctrl_names <- design_names[grepl(paste0("^group",ctrl_regex,"_.*",cell_type,"$"), colnames(y$design), perl = TRUE)] #No need for the * as you want anything that contains "V_T"
+  # exp_names <- design_names[grepl(paste0("^group",ctrl_regex,".*",cell_type,"$"), colnames(y$design), perl = TRUE, invert=TRUE)]
+  # ctrl_names <- design_names[grepl(paste0("^group",ctrl_regex,".*",cell_type,"$"), colnames(y$design), perl = TRUE)]
+  
+  # Correct way to get exp_names (inverted match):
+  match_celltype_msk <- str_detect(colnames(y$design), paste0(cell_type, "$"))
+  matching_names <- colnames(y$design)[match_celltype_msk]
+  exp_names_idx <- str_detect(matching_names, paste0("^group", ctrl_regex, ".*", cell_type, "$"),negate=TRUE)
+  exp_names <- matching_names[exp_names_idx]
+  ctrl_names_idx <- str_detect(matching_names, paste0("^group", ctrl_regex, ".*", cell_type, "$"))
+  ctrl_names <- matching_names[ctrl_names_idx]
+  
   print(paste0("Experiment group names:",exp_names))
   print(paste0("Control group names:",ctrl_names))
   

@@ -1,6 +1,7 @@
 ### https://www.sc-best-practices.org/preamble.html
 ### https://scanpy.readthedocs.io/en/stable/index.html
 ### https://github.com/scverse/scanpy
+import argparse
 import json
 # import warnings
 # warnings.filterwarnings("ignore", category=DeprecationWarning)
@@ -20,7 +21,7 @@ import anndata as ad
 import pandas as pd
 import seaborn as sns
 import seaborn.objects as so
-import pertpy as pt
+# import pertpy as pt
 import decoupler
 
 from matplotlib import pyplot as plt
@@ -29,7 +30,7 @@ from matplotlib.backends.backend_pdf import PdfPages
 from scipy.stats import median_abs_deviation
 from scipy import sparse, io
 from scipy.sparse import csr_matrix, issparse
-import scvi
+# import scvi
 import sccoda
 from sccoda.util import cell_composition_data as dat
 from sccoda.util import data_visualization as viz
@@ -42,11 +43,10 @@ from sccoda.model import other_models as om
 import celltypist
 from celltypist import models
 import sc_toolbox as sct
-from pydeseq2.dds import DeseqDataSet, DefaultInference
-from pydeseq2.ds import DeseqStats
+# from pydeseq2.dds import DeseqDataSet, DefaultInference
+# from pydeseq2.ds import DeseqStats
 
 sc.settings.set_figure_params(dpi=80, facecolor="white")
-outpath = "/storage/Documents/service/externe/ilan/20241209_scRNAseq_FL_SA/out"
 
 def read_cellranger(samples):
     print("## Reading cellranger count matrix")
@@ -178,7 +178,7 @@ def is_outlier(adata, metric: str, nmads: int):
     )
     return outlier
 
-def run_soupx(adata, soupx_path):
+def run_soupx(adata, adata_raw, soupx_path):
     # soupx_path = os.path.join(outpath, 'SoupX')
     # if not os.path.exists(soupx_path):
     #     os.makedirs(soupx_path, exist_ok=True)
@@ -199,21 +199,21 @@ def run_soupx(adata, soupx_path):
     data = adata.X.T
 
     print("Reading cellranger raw count matrices")
-    adatas_raw = {}
-    for sample_id, filename in samples_raw.items():
-        print(f"Reading cellranger raw count matrix {filename}")
-        adata_raw = sc.read_10x_h5(filename)
-        print("Make unique gene names")
-        adata_raw.var_names_make_unique()
-
-        # del adata_raw
-        adatas_raw[sample_id] = adata_raw
-        print("Done")
-
-    adatas_raw = ad.concat(adatas_raw, label="sample")
-    print("Make raw data unique observation names")
-    adatas_raw.obs_names_make_unique()
-    data_tod = adatas_raw.X.T
+    # adatas_raw = {}
+    # for sample_id, filename in samples_raw.items():
+    #     print(f"Reading cellranger raw count matrix {filename}")
+    #     adata_raw = sc.read_10x_h5(filename)
+    #     print("Make unique gene names")
+    #     adata_raw.var_names_make_unique()
+    #
+    #     # del adata_raw
+    #     adatas_raw[sample_id] = adata_raw
+    #     print("Done")
+    #
+    # adatas_raw = ad.concat(adatas_raw, label="sample")
+    # print("Make raw data unique observation names")
+    # adatas_raw.obs_names_make_unique()
+    data_tod = adata_raw.X.T
 
     print("Saving filtered data matrix")
     sparse.save_npz(os.path.join(soupx_path, 'data_matrix.npz'), data)
@@ -257,7 +257,7 @@ def run_soupx(adata, soupx_path):
     adata.X = adata.layers["soupX_counts"]
     return adata
 
-def run_qc(adata, outpath):
+def run_qc(adata, adata_raw, outpath):
     ## Quality Control
     print("## Running QC")
     qc_path = os.path.join(outpath, '01-QC')
@@ -303,7 +303,7 @@ def run_qc(adata, outpath):
     if not os.path.exists(soupx_path):
         os.makedirs(soupx_path, exist_ok=True)
 
-    adata = run_soupx(adata, soupx_path)
+    adata = run_soupx(adata, adata_raw, soupx_path)
 
     # filter out genes that are not detected in at least 20 cells
     print("## Filter out genes that are not detected in at least 20 cells")
@@ -352,8 +352,17 @@ def run_normalization(adata, outpath, write_h5ad=True):
 
     # Analytic Pearson residuals method
     print("## Analytic Pearson residuals method")
+    adata.X = adata.X.astype(np.int64)
+    x = adata.X
     analytic_pearson = sc.experimental.pp.normalize_pearson_residuals(adata, inplace=False)
-    adata.layers["analytic_pearson_residuals"] = csr_matrix(analytic_pearson["X"])
+    new_X = analytic_pearson["X"]
+    if np.isnan(new_X).any():
+        nan_nbr = np.sum(np.isnan(new_X))
+        total_cells = new_X.shape[0] * new_X.shape[1]
+        print(f"{nan_nbr}/{total_cells} NaNs found in the analytic_pearson_residuals matrix. Will change to 0!")
+        # Handle the NaNs appropriately (e.g., replace, remove)
+        new_X = np.nan_to_num(new_X)  # Replace NaNs with 0 (or another value)
+    adata.layers["analytic_pearson_residuals"] = csr_matrix(new_X)
 
     if write_h5ad:
         print("# Write resulting adata object to h5ad file")
@@ -490,7 +499,7 @@ def run_clustering(adata, outpath, resolutions):
 
     return adata
 
-def run_celltypist_annotation(adata, ann_path, resolutions):
+def run_celltypist_annotation(adata, ann_path, res):
     print("## Running CellTypist Automated annotation")
 
     adata_celltypist = adata.copy()  # make a copy of our adata
@@ -518,45 +527,45 @@ def run_celltypist_annotation(adata, ann_path, resolutions):
     model_high.write(os.path.join(ann_path, 'Immune_All_High.mouse.pkl'))
 
     all_keys = []
-    for res in resolutions:
-        print(f"Running celltypist annotation with resolution {res}")
-        print("Annotating using coarse model")
-        cl_coarse = f"celltypist_cell_label_coarse_{res}"
-        cs_coarse = f"celltypist_conf_score_coarse_{res}"
-        predictions_high = celltypist.annotate(
-            adata_celltypist, model=os.path.join(ann_path, 'Immune_All_High.mouse.pkl'), majority_voting=True, over_clustering=f"leiden_{res}"
-        )
-        predictions_high_adata = predictions_high.to_adata()
+    # for res in resolutions:
+    print(f"Running celltypist annotation with resolution {res}")
+    print("Annotating using coarse model")
+    cl_coarse = f"celltypist_cell_label_coarse_{res}"
+    cs_coarse = f"celltypist_conf_score_coarse_{res}"
+    predictions_high = celltypist.annotate(
+        adata_celltypist, model=os.path.join(ann_path, 'Immune_All_High.mouse.pkl'), majority_voting=True, over_clustering=f"leiden_{res}"
+    )
+    predictions_high_adata = predictions_high.to_adata()
 
-        adata.obs[cl_coarse] = predictions_high_adata.obs.loc[
-            adata.obs.index, "majority_voting"
-        ]
-        adata.obs[cs_coarse] = predictions_high_adata.obs.loc[
-            adata.obs.index, "conf_score"
-        ]
-        all_keys.append(cl_coarse)
-        all_keys.append(cs_coarse)
+    adata.obs[cl_coarse] = predictions_high_adata.obs.loc[
+        adata.obs.index, "majority_voting"
+    ]
+    adata.obs[cs_coarse] = predictions_high_adata.obs.loc[
+        adata.obs.index, "conf_score"
+    ]
+    all_keys.append(cl_coarse)
+    all_keys.append(cs_coarse)
 
-        print("Annotating using fine model")
-        cl_fine = f"celltypist_cell_label_fine_{res}"
-        cs_fine = f"celltypist_conf_score_fine_{res}"
-        predictions_low = celltypist.annotate(
-            adata_celltypist, model=os.path.join(ann_path, 'Immune_All_Low.mouse.pkl'), majority_voting=True, over_clustering=f"leiden_{res}"
-        )
-        predictions_low_adata = predictions_low.to_adata()
-        adata.obs[f"celltypist_cell_label_fine_{res}"] = predictions_low_adata.obs.loc[
-            adata.obs.index, "majority_voting"
-        ]
-        adata.obs[f"celltypist_conf_score_fine_{res}"] = predictions_low_adata.obs.loc[
-            adata.obs.index, "conf_score"
-        ]
-        all_keys.append(cl_fine)
-        all_keys.append(cs_fine)
+    print("Annotating using fine model")
+    cl_fine = f"celltypist_cell_label_fine_{res}"
+    cs_fine = f"celltypist_conf_score_fine_{res}"
+    predictions_low = celltypist.annotate(
+        adata_celltypist, model=os.path.join(ann_path, 'Immune_All_Low.mouse.pkl'), majority_voting=True, over_clustering=f"leiden_{res}"
+    )
+    predictions_low_adata = predictions_low.to_adata()
+    adata.obs[f"celltypist_cell_label_fine_{res}"] = predictions_low_adata.obs.loc[
+        adata.obs.index, "majority_voting"
+    ]
+    adata.obs[f"celltypist_conf_score_fine_{res}"] = predictions_low_adata.obs.loc[
+        adata.obs.index, "conf_score"
+    ]
+    all_keys.append(cl_fine)
+    all_keys.append(cs_fine)
 
 
     output_annotation_qc(
         adata,
-        os.path.join(ann_path, "CellTypist_Annotation.pdf"),
+        os.path.join(ann_path, f"CellTypist_Annotation.{res}.pdf"),
         all_keys
     )
 
@@ -588,69 +597,68 @@ def output_annotation_qc(adata, o_path, all_keys):
 
         plt.close()
 
-def run_clustifyr_annotation(adata, ann_path, resolutions):
+def run_clustifyr_annotation(adata, ann_path, res):
     print("## Running Clustifyr annotation")
 
     print(f"Preparing clustifyr input files")
     adata_clustifyr = adata.copy()
     adata_clustifyr.X = adata.layers["soupX_counts"]
     data = adata_clustifyr.X.T
-    sparse.save_npz(os.path.join(ann_path, 'data_matrix.npz'), data)
+    sparse.save_npz(os.path.join(ann_path, f'data_matrix.npz'), data)
     pd.Series(adata_clustifyr.obs_names.to_series()).to_csv(
-        os.path.join(ann_path, 'data_barcodes.tsv'),
+        os.path.join(ann_path, f'data_barcodes.tsv'),
         sep="\t", index=False, header=False
     )
     pd.Series(adata_clustifyr.var_names.to_series()).to_csv(
-        os.path.join(ann_path, 'data_features.tsv'),
+        os.path.join(ann_path, f'data_features.tsv'),
         sep="\t", index=False, header=False
     )
 
     highly_variant = adata_clustifyr.var["highly_variable"].loc[
         adata_clustifyr.var["highly_variable"] == True].index.tolist()
-    with open(os.path.join(ann_path, 'highly_variant.tsv'), 'w', newline='\n') as f_output:
+    with open(os.path.join(ann_path, f'highly_variant.tsv'), 'w', newline='\n') as f_output:
         tsv_output = csv.writer(f_output, delimiter='\n')
         tsv_output.writerow(highly_variant)
 
     all_keys = []
-    for res in resolutions:
-        print(f"Running clustifyr annotation with resolution {res}")
-        clustifyr_groups = adata_clustifyr.obs[f"leiden_{res}"]
-        clustifyr_groups.to_csv(os.path.join(ann_path, f'clusters_{res}.tsv'), sep="\t", index=True, header=False)
+    print(f"Running clustifyr annotation with resolution {res}")
+    clustifyr_groups = adata_clustifyr.obs[f"leiden_{res}"]
+    clustifyr_groups.to_csv(os.path.join(ann_path, f'clusters_{res}.tsv'), sep="\t", index=True, header=False)
 
-        print("Running Clustifyr in R")
-        command = (
-                "Rscript --vanilla "
-                + os.path.join(os.path.dirname(__file__), '../R/run_clustifyr.R ')
-                + " -o " + os.path.join(ann_path, f'clustifyr_leiden_{res}.tsv')
-                + " -f " + os.path.join(ann_path, 'data_matrix.npz')
-                + " -c " + os.path.join(ann_path, f'clusters_{res}.tsv')
-                + " -g " + os.path.join(ann_path, 'data_features.tsv')
-                + " -b " + os.path.join(ann_path, 'data_barcodes.tsv')
-                + " -v " + os.path.join(ann_path, 'highly_variant.tsv')
-                + " -x " + sys.executable
-        )
-        print(command)
-        return_code = subprocess.call(command, shell=True)
+    print("Running Clustifyr in R")
+    command = (
+            "Rscript --vanilla "
+            + os.path.join(os.path.dirname(__file__), '../R/run_clustifyr.R ')
+            + " -o " + os.path.join(ann_path, f'clustifyr_leiden_{res}.tsv')
+            + " -f " + os.path.join(ann_path, 'data_matrix.npz')
+            + " -c " + os.path.join(ann_path, f'clusters_{res}.tsv')
+            + " -g " + os.path.join(ann_path, 'data_features.tsv')
+            + " -b " + os.path.join(ann_path, 'data_barcodes.tsv')
+            + " -v " + os.path.join(ann_path, 'highly_variant.tsv')
+            + " -x " + sys.executable
+    )
+    print(command)
+    return_code = subprocess.call(command, shell=True)
 
-        if return_code == 0:
-            print("Clustifyr executed successfully.")
-        else:
-            print("Clustifyr failed with return code", return_code)
+    if return_code == 0:
+        print("Clustifyr executed successfully.")
+    else:
+        print("Clustifyr failed with return code", return_code)
 
-        print("Loading Clustifyr result matrix")
-        clustifyr_matrix = pd.read_csv(os.path.join(ann_path, f'clustifyr_leiden_{res}.tsv'), sep="\t", header=None)
+    print("Loading Clustifyr result matrix")
+    clustifyr_matrix = pd.read_csv(os.path.join(ann_path, f'clustifyr_leiden_{res}.tsv'), sep="\t", header=None)
 
-        celltype = clustifyr_matrix.iloc[:, 2]
-        adata.obs[f"clustifyr_cell_label_{res}"] = [c for c in celltype]
-        all_keys.append(f"clustifyr_cell_label_{res}")
+    celltype = clustifyr_matrix.iloc[:, 2]
+    adata.obs[f"clustifyr_cell_label_{res}"] = [c for c in celltype]
+    all_keys.append(f"clustifyr_cell_label_{res}")
 
-        score = clustifyr_matrix.iloc[:, 3]
-        adata.obs[f"clustifyr_conf_score_{res}"] = [c for c in score]
-        all_keys.append(f"clustifyr_conf_score_{res}")
+    score = clustifyr_matrix.iloc[:, 3]
+    adata.obs[f"clustifyr_conf_score_{res}"] = [c for c in score]
+    all_keys.append(f"clustifyr_conf_score_{res}")
 
     output_annotation_qc(
         adata,
-        os.path.join(ann_path, "Clustifyr_Annotation.pdf"),
+        os.path.join(ann_path, f"Clustifyr_Annotation.{res}.pdf"),
         all_keys
     )
 
@@ -670,25 +678,27 @@ def run_clustifyr_annotation(adata, ann_path, resolutions):
 #         "/storage/Documents/service/externe/ilan/20241209_scRNAseq_FL_SA/TICAtlas_integrated_matrix.csv", index_col=0
 #     )
 
-def run_annotation(adata, outpath, resolutions, markers):
+def run_annotation(adata, outpath, res, markers):
     ann_path = os.path.join(outpath, '05-Annotation')
     if not os.path.exists(ann_path):
         os.makedirs(ann_path, exist_ok=True)
 
-    adata = run_celltypist_annotation(adata, ann_path, resolutions)
-    adata = run_clustifyr_annotation(adata, ann_path, resolutions)
+    adata = run_celltypist_annotation(adata, ann_path, res)
+    adata = run_clustifyr_annotation(adata, ann_path, res)
     # adata = run_TICAtlas_annotation(adata, ann_path, resolutions)
 
-    for res in resolutions:
-        print(f"Outputting markers annotation plots for {res}")
+    print(f"Outputting markers annotation plots for {res}")
+    with PdfPages(os.path.join(ann_path, f"Markers_Annotation_{res}.pdf"),) as pdf:
 
-        with PdfPages(os.path.join(ann_path, f"Markers_Annotation_{res}.pdf"),) as pdf:
+        adata.layers["scaled"] = sc.pp.scale(adata, copy=True).X
 
-            adata.layers["scaled"] = sc.pp.scale(adata, copy=True).X
+        for label in [f"celltypist_cell_label_coarse_{res}", f"celltypist_cell_label_fine_{res}", f"clustifyr_cell_label_{res}"]:
+
             sc.pl.dotplot(
                 adata,
                 marker_genes,
-                groupby=f"clustifyr_cell_label_{res}",
+                groupby=label,
+                title=label,
                 show=False
             )
             pdf.savefig(bbox_inches="tight")
@@ -696,26 +706,18 @@ def run_annotation(adata, outpath, resolutions, markers):
             sc.pl.stacked_violin(
                 adata,
                 marker_genes,
-                groupby=f"clustifyr_cell_label_{res}",
+                groupby=label,
+                title=label,
                 cmap="RdBu_r",
                 show=False
             )
             pdf.savefig(bbox_inches="tight")
 
-            # sc.pl.heatmap(
-            #     adata,
-            #     marker_genes,
-            #     groupby=f"leiden_{res}",
-            #     layer="scaled",
-            #     dendrogram=True,
-            #     show=False
-            # )
-            # pdf.savefig(bbox_inches="tight")
-
             sc.pl.matrixplot(
                 adata,
                 marker_genes,
-                groupby=f"clustifyr_cell_label_{res}",
+                groupby=label,
+                title=label,
                 colorbar_title="mean z-score",
                 layer="scaled",
                 vmin=-2,
@@ -725,10 +727,10 @@ def run_annotation(adata, outpath, resolutions, markers):
             )
             pdf.savefig(bbox_inches="tight")
 
-            plt.close()
+        plt.close()
 
     print("# Write resulting adata object to h5ad file")
-    adata.write(os.path.join(outpath, "adata_annotation.h5ad"))
+    adata.write(os.path.join(outpath, f"adata_annotation.{res}.h5ad"))
 
     return adata
 
@@ -738,7 +740,7 @@ def output_dge_qc(adata_pb, outpath):
 
     # sc.pp.normalize_total(adata_pb, target_sum=1e6)
     # sc.pp.log1p(adata_pb)
-    adata_pb.X = adata_pb.X.astype(np.int64)
+    # adata_pb.X = adata_pb.X.astype(np.int64)
     adata_pb = run_normalization(adata_pb, outpath, write_h5ad=False)
     adata_pb.X = adata_pb.layers["analytic_pearson_residuals"]
 
@@ -858,9 +860,9 @@ def volcano_plot(pdf, adata, group_key, title=None, LOG_FOLD_CHANGE=1.0, FDR=0.0
     fig.suptitle(title)
     pdf.savefig(fig, bbox_inches="tight")
 
-def get_edger_annadata(dge_path, adata_dge, res, LOG_FOLD_CHANGE=1.0, FDR=0.05):
+def get_edger_annadata(dge_path, adata_dge, res, ctrl_group_regex):
     print("Associate edger results to anndata")
-    ctrl_group, treat_group = get_adata_sample_groups(adata_dge)
+    ctrl_group, treat_group = get_adata_sample_groups(adata_dge, ctrl_group_regex)
 
     for i, cell_type in enumerate(adata_dge.obs[f"clustifyr_cell_label_{res}"].cat.categories[0:]):
         for e in treat_group:
@@ -895,7 +897,7 @@ def get_edger_annadata(dge_path, adata_dge, res, LOG_FOLD_CHANGE=1.0, FDR=0.05):
                     print(f"EdgeR result {rf} does not exist")
     return adata_dge
 
-def run_dge(adata, dge_path, res, treat_group_regex, ctrl_group_regex, LOG_FOLD_CHANGE=1.0, FDR=0.05):
+def run_dge(adata, dge_path, res, ctrl_group_regex, LOG_FOLD_CHANGE=1.0, FDR=0.05):
 
     print( f"## Running DGE for resolution {res}")
     adata_dge = adata.copy()
@@ -969,7 +971,6 @@ def run_dge(adata, dge_path, res, treat_group_regex, ctrl_group_regex, LOG_FOLD_
             + f" -r {res}"
             + " -m " + os.path.join(dge_path, f'edger_counts.{res}.tsv')
             + " -g " + os.path.join(dge_path, f'edger_groups.{res}.tsv')
-            + " -t " + treat_group_regex
             + " -c " + ctrl_group_regex
     )
     print(command)
@@ -981,7 +982,7 @@ def run_dge(adata, dge_path, res, treat_group_regex, ctrl_group_regex, LOG_FOLD_
         print("EdgeR failed with return code", return_code)
 
 
-    adata_dge = get_edger_annadata(dge_path, adata_dge, res, LOG_FOLD_CHANGE, FDR)
+    adata_dge = get_edger_annadata(dge_path, adata_dge, res, ctrl_group_regex)
     # adata_dge.X = adata_dge.layers["counts"].copy()
     # sc.pp.normalize_total(adata_dge, target_sum=1e6)
     # sc.pp.log1p(adata_dge)
@@ -989,11 +990,11 @@ def run_dge(adata, dge_path, res, treat_group_regex, ctrl_group_regex, LOG_FOLD_
     adata_dge.X = adata_dge.layers["analytic_pearson_residuals"]
 
     with PdfPages(os.path.join(dge_path, f"dge_report_volcanos.pdf")) as pdf:
-        ctrl_group, treat_group = get_adata_sample_groups(adata_dge)
+        ctrl_group, treat_group = get_adata_sample_groups(adata_dge, ctrl_group_regex)
         for i, cell_type in enumerate(adata_dge.obs[f"clustifyr_cell_label_{res}"].cat.categories[0:]):
             for e in treat_group:
                 for c in ctrl_group:
-                    rf = dge_path + '/dge_' + e + "--" + c + "--" + cell_type + f"--{res}.tsv"
+                    rf = dge_path + f"/dge_{e}--{c}--{cell_type}--{res}.tsv"
                     if os.path.isfile(rf):
                         print(f"filtering EdgeR result edgeR--{e}--{c}--{cell_type}--{res}")
                         edger_df = pd.read_csv(rf, sep="\t", index_col=0)
@@ -1004,7 +1005,7 @@ def run_dge(adata, dge_path, res, treat_group_regex, ctrl_group_regex, LOG_FOLD_
                             (edger_df["FDR"] <= FDR) & (abs(edger_df["logFC"]) >= LOG_FOLD_CHANGE)
                         ]
                         filtered_df.to_csv(
-                            os.path.join(dge_path + '/dge_' + e + "--" + c + "--" + cell_type + f"--{res}.filtered.tsv"),
+                            os.path.join(dge_path + f"/dge_{e}--{c}--{cell_type}--{res}.filtered.tsv"),
                             sep="\t",
                             index=True
                         )
@@ -1026,7 +1027,7 @@ def run_dge(adata, dge_path, res, treat_group_regex, ctrl_group_regex, LOG_FOLD_
 
 def run_composition(adata, outpath, res, FDR=0.05):
     print("## Running compositional analysis")
-    comp_path = os.path.join(outpath, '07-CellComposition')
+    comp_path = os.path.join(outpath, '08-CellComposition')
     if not os.path.exists(comp_path):
         os.makedirs(comp_path, exist_ok=True)
 
@@ -1043,10 +1044,12 @@ def run_composition(adata, outpath, res, FDR=0.05):
     print("Run Hamiltonian Monte Carlo (HMC) sampling")
     all_results = model_all.sample_hmc()
     (intercept_df,effect_df) = all_results.summary_prepare(est_fdr=FDR)
-    effect_df.to_csv(os.path.join(comp_path, 'comp_effect.tsv'), sep="\t", header=True)
-    intercept_df.to_csv(os.path.join(comp_path, 'comp_intercept.tsv'), sep="\t", header=True)
 
-    with PdfPages(os.path.join(comp_path, f"compositional_analysis_report.pdf")) as pdf:
+    print("Output results")
+    effect_df.to_csv(os.path.join(comp_path, f'comp_effect.{res}.tsv'), sep="\t", header=True)
+    intercept_df.to_csv(os.path.join(comp_path, f'comp_intercept.{res}.tsv'), sep="\t", header=True)
+
+    with PdfPages(os.path.join(comp_path, f"compositional_analysis_report.{res}.pdf")) as pdf:
         viz.stacked_barplot(
             data_sc,
             feature_name="samples",
@@ -1072,43 +1075,8 @@ def run_composition(adata, outpath, res, FDR=0.05):
         )
         pdf.savefig(bbox_inches="tight")
 
-        # viz.boxplots(
-        #     data_sc,
-        #     feature_name="condition",
-        #     plot_facets=True,
-        #     y_scale="log",
-        #     add_dots=True,
-        #     cmap="Reds",
-        # )
-        # pdf.savefig(bbox_inches="tight")
-
-    ### milo not working since only having 1N per sample
-    ### investigate later
-
-    ### rework this part when more N available
-    # adata_comp.obs["condition"] = adata_comp.obs["sample"]
-    # # adata_comp.obs["sample"] = "T"
-    # milo = pt.tl.Milo()
-    # mdata = milo.load(adata_comp)
-    #
-    # milo.make_nhoods(mdata, prop=0.1)
-    # milo.count_nhoods(mdata, sample_col="sample")
-    #
-    # # # The crucial change: NO drop_duplicates()
-    # # covariates = ["sample"]  # Or whatever covariates are in your design formula
-    # # sample_obs = mdata["milo"].obs[covariates].copy()  # Copy is important!
-    # # sample_obs.index = sample_obs["sample"]  # Set index to sample names
-    # #
-    # # mdata["milo"].obs = sample_obs.loc[mdata["milo"].obs_names]  # Update Milo's obs
-    #
-    # milo.da_nhoods(
-    #     mdata, design="~ condition", solver="batchglm" #, model_contrasts="FL_T-V_T"
-    # )
-    # # milo_results_salmonella = mdata["milo"].obs.copy()
-    # # milo_results_salmonella
-
-    print("# Write resulting adata object to h5ad file")
-    adata.write(os.path.join(outpath, "adata_composition.h5ad"))
+    # print("# Write resulting adata object to h5ad file")
+    # adata.write(os.path.join(outpath, f"adata_composition.h5ad"))
 
     print("done")
     return data_sc
@@ -1129,42 +1097,57 @@ def gmt_to_decoupler(pth) -> pd.DataFrame:
         columns=["geneset", "genesymbol"],
     )
 
-def run_gsea(adata_dge, outpath, dge_path, resolutions, treat_group_regex, ctrl_group_regex):
+def run_gsea(adata_dge, outpath, dge_path, res, ctrl_group_regex):
     print("## Running GSEA analysis")
-    gsea_path = os.path.join(outpath, '08-FunctionnalEnrichment')
+    gsea_path = os.path.join(outpath, '09-FunctionnalEnrichment')
     if not os.path.exists(gsea_path):
         os.makedirs(gsea_path, exist_ok=True)
 
     # Storing the counts for later use
     adata_gsea = adata_dge.copy()
-    print("# populate adata with edger results")
-    adata_gsea = get_edger_annadata(dge_path, adata_gsea, treat_group_regex, ctrl_group_regex)
+    print("Populate adata with edger results")
+    adata_gsea = get_edger_annadata(dge_path, adata_gsea, res, ctrl_group_regex)
 
     # adata_gsea.layers["counts"] = adata_gsea.layers["soupX_counts"].X.copy()
     # # Renaming label to condition
-    print("# normalise data")
+    print("Normalise data")
     adata_gsea.obs = adata_gsea.obs.rename({"sample": "condition"}, axis=1)
     # sc.pp.normalize_total(adata_gsea, target_sum=1e6)
     # sc.pp.log1p(adata_gsea)
-    adata_gsea = run_normalization(adata_gsea, outpath, write_h5ad=False)
+    # adata_gsea = run_normalization(adata_gsea, outpath, write_h5ad=False)
     adata_gsea.X = adata_gsea.layers["analytic_pearson_residuals"]
 
-    ctrl_group, treat_group = get_adata_sample_groups(adata_dge)
-    for i, cell_type in enumerate(adata_gsea.obs["clustifyr_cell_label_0.1"].cat.categories[0:]):
+    print(f"Read and prepare reactome file m2.cp.reactome.v2024.1.Mm.symbols.gmt")
+    # downloaded from https://www.gsea-msigdb.org/gsea/downloads.jsp
+    reactome = gmt_to_decoupler(
+        os.path.join(
+            os.path.dirname(__file__),
+            '../include/msigdb_v2024.1.Mm_files_to_download_locally/msigdb_v2024.1.Mm_GMTs/m2.cp.reactome.v2024.1.Mm.symbols.gmt'
+        )
+    )
+    # Filter duplicates
+    reactome = reactome[~reactome.duplicated(("geneset", "genesymbol"))]
+    # Rename
+    reactome.loc[:, 'geneset'] = [name.split('REACTOME_')[1] for name in reactome['geneset']]
+    reactome = reactome.set_index('geneset', drop=False)
+    reactome = reactome.rename_axis(None)
+
+    # Filtering genesets to match behaviour of fgsea
+    geneset_size = reactome.groupby("geneset").size()
+    gsea_genesets = geneset_size.index[(geneset_size > 15) & (geneset_size < 500)]
+
+    ctrl_group, treat_group = get_adata_sample_groups(adata_dge, ctrl_group_regex)
+    for i, cell_type in enumerate(adata_gsea.obs[f"clustifyr_cell_label_{res}"].cat.categories[0:]):
         for e in treat_group:
             for c in ctrl_group:
-                if f"edgeR--{e}--{c}--{cell_type}" not in adata_gsea.uns.keys():
+                if f"edgeR--{e}--{c}--{cell_type}--{res}" not in adata_gsea.uns.keys():
                     continue
 
-                # cell_type = "DC_DC.8"
-                # e = "FL_T"
-                # c = "V_T"
-                # celltype_condition = f"FL_T_{cell_type}"
-                d = sc.get.rank_genes_groups_df(adata_gsea, group=cell_type, key=f"edgeR--{e}--{c}--{cell_type}")
-
+                print(f"edgeR--{e}--{c}--{cell_type}--{res}: Extracting highly variable gene")
+                results_df = sc.get.rank_genes_groups_df(adata_gsea, group=cell_type, key=f"edgeR--{e}--{c}--{cell_type}--{res}")
                 t_stats = (
                     # Get dataframe of DE results for condition vs. rest
-                    d
+                    results_df
                     # Subset to highly variable genes
                     .set_index("names")
                     .loc[adata_gsea.var["highly_variable"]]
@@ -1173,28 +1156,9 @@ def run_gsea(adata_dge, outpath, dge_path, resolutions, treat_group_regex, ctrl_
                         # Format for decoupler
                         ["scores"]
                     ]
-                    #.rename_axis([f"{e}--{c}--{cell_type}"], axis=1)
                 )
-                # print(t_stats)
 
-                # downloaded from https://www.gsea-msigdb.org/gsea/downloads.jsp
-                reactome = gmt_to_decoupler(
-                    os.path.join(
-                        os.path.dirname(__file__),
-                        '../include/msigdb_v2024.1.Mm_files_to_download_locally/msigdb_v2024.1.Mm_GMTs/m2.cp.reactome.v2024.1.Mm.symbols.gmt'
-                    )
-                )
-                # Filter duplicates
-                reactome = reactome[~reactome.duplicated(("geneset", "genesymbol"))]
-                # Rename
-                reactome.loc[:, 'geneset'] = [name.split('REACTOME_')[1] for name in reactome['geneset']]
-                reactome = reactome.set_index('geneset', drop=False)
-                reactome = reactome.rename_axis(None)
-
-                # Filtering genesets to match behaviour of fgsea
-                geneset_size = reactome.groupby("geneset").size()
-                gsea_genesets = geneset_size.index[(geneset_size > 15) & (geneset_size < 500)]
-
+                print(f"edgeR--{e}--{c}--{cell_type}--{res}: Running GSEA analysis")
                 scores, norm, pvals = decoupler.run_gsea(
                     t_stats.T,
                     reactome[reactome["geneset"].isin(gsea_genesets)],
@@ -1208,8 +1172,8 @@ def run_gsea(adata_dge, outpath, dge_path, resolutions, treat_group_regex, ctrl_
                     .sort_values("pval")
                 )
 
-                gsea_results.to_csv(os.path.join(gsea_path, f"{e}--{c}--{cell_type}.gsea.tsv"), sep="\t")
-
+                print(f"edgeR--{e}--{c}--{cell_type}--{res}: Output GSEA results")
+                gsea_results.to_csv(os.path.join(gsea_path, f"{e}--{c}--{cell_type}--{res}.gsea.tsv"), sep="\t")
                 p = (
                     so.Plot(
                         data=(
@@ -1221,9 +1185,11 @@ def run_gsea(adata_dge, outpath, dge_path, resolutions, treat_group_regex, ctrl_
                         y="Pathway",
                     ).add(so.Bar())
                 )
-                p.save(os.path.join(gsea_path, f"{e}--{c}--{cell_type}.gsea.pdf"),bbox_inches="tight")
+                p.save(os.path.join(gsea_path, f"{e}--{c}--{cell_type}--{res}.gsea.pdf"),bbox_inches="tight")
 
-                results_df = sc.get.rank_genes_groups_df(adata_gsea, group=cell_type, key=f"edgeR--{e}--{c}--{cell_type}")
+                print(f"edgeR--{e}--{c}--{cell_type}--{res}: Running ORA analysis")
+                #          d = sc.get.rank_genes_groups_df(adata_gsea, group=cell_type, key=f"edgeR--{e}--{c}--{cell_type}--{res}")
+                # results_df = sc.get.rank_genes_groups_df(adata_gsea, group=cell_type, key=f"edgeR--{e}--{c}--{cell_type}--{res}")
                 results_df = results_df.set_index('names', drop=False)
                 results_df = results_df.rename_axis(None)
                 # Infer enrichment with ora using significant deg
@@ -1239,20 +1205,21 @@ def run_gsea(adata_dge, outpath, dge_path, resolutions, treat_group_regex, ctrl_
                     verbose=True
                 ).sort_values('Combined score', ascending=False)
 
-                enr_pvals.to_csv(os.path.join(gsea_path, f"{e}--{c}--{cell_type}.ora.tsv"), sep="\t")
+                print(f"edgeR--{e}--{c}--{cell_type}--{res}: Output ORA results")
+                enr_pvals.to_csv(os.path.join(gsea_path, f"{e}--{c}--{cell_type}--{res}.ora.tsv"), sep="\t")
 
                 # print(enr_pvals.head())
                 if not enr_pvals.empty:
-                    with PdfPages(os.path.join(gsea_path, f"{e}--{c}--{cell_type}.ora.pdf")) as pdf:
+                    with PdfPages(os.path.join(gsea_path, f"{e}--{c}--{cell_type}--{res}.ora.pdf")) as pdf:
                         decoupler.plot_dotplot(
                             enr_pvals.head(15),
                             x='Combined score',
                             y='Term',
                             s='Odds ratio',
                             c='FDR p-value',
-                            scale=0.3,
+                            scale=0.1,
                             figsize=(3, 9),
-                            title=f"{e}--{c}--{cell_type}",
+                            title=f"{e}--{c}--{cell_type}--{res}",
                         )
                         pdf.savefig(bbox_inches="tight")
 
@@ -1269,9 +1236,10 @@ def run_gsea(adata_dge, outpath, dge_path, resolutions, treat_group_regex, ctrl_
                             pdf.savefig(bbox_inches="tight")
 
                 else:
-                    print(f"No ORA returned for celltype {cell_type}")
+                    print(f"edgeR--{e}--{c}--{cell_type}--{res}: No ORA returned for celltype {cell_type} at resolutoon {res}")
+    print("done")
 
-def run_dge_deseq(adata, outpath, resolutions, treat_group_regex, ctrl_group_regex):
+def run_dge_deseq(adata, outpath, resolutions, ctrl_group_regex):
     print("## Running differential gene expression analysis")
     dge_path = os.path.join(outpath, '06-DifferentialGeneExpression')
     if not os.path.exists(dge_path):
@@ -1376,7 +1344,7 @@ def run_dge_deseq(adata, outpath, resolutions, treat_group_regex, ctrl_group_reg
 
             stat_res.summary()
 
-def get_adata_sample_groups(adata):
+def get_adata_sample_groups(adata, ctrl_group_regex):
     sample = adata.obs["sample"].cat.categories
     ctrl_group = []
     treat_group = []
@@ -1384,87 +1352,176 @@ def get_adata_sample_groups(adata):
     for s in sample:
         if re.search(ctrl_group_regex, s):
             ctrl_group.append(s)
-        elif re.search(treat_group_regex, s):
-            treat_group.append(s)
         else:
-            print(f"Urecongnised group {s} using regex {ctrl_group_regex} or regex {treat_group_regex}")
+            treat_group.append(s)
 
     return ctrl_group, treat_group
 
-def main(samples, outpath, resolutions, markers, treat_group_regex, ctrl_group_regex):
+def main(samples, samples_raw, outpath, resolutions, markers, ctrl_group_regex):
     print("Starting")
-    # adata = read_cellranger(samples)
-    #
-    # # create out dir if not exists
-    # if not os.path.exists(outpath):
-    #     os.makedirs(outpath, exist_ok=True)
-    #
-    # adata = run_qc(adata, outpath)
-    #
-    # # adata = sc.read_h5ad(os.path.join(outpath, "adata_quality_control.h5ad"))
-    # adata = run_normalization(adata, outpath)
-    # #
-    # # # adata = sc.read_h5ad(os.path.join(outpath, "adata_normalisation.h5ad"))
-    # adata = run_feature_selection(adata, outpath)
-    # #
-    # # # adata = sc.read_h5ad(os.path.join(outpath, "adata_feature_selection.h5ad"))
-    # adata = run_dim_reduction(adata, outpath)
-    # #
-    # # # adata = sc.read_h5ad(os.path.join(outpath, "adata_dimensionality_reduction.h5ad"))
-    # adata = run_clustering(adata, outpath, resolutions)
-    # #
-    # # # adata = sc.read_h5ad(os.path.join(outpath, "adata_clustering.h5ad"))
-    # adata = run_annotation(adata, outpath, resolutions, markers)
+    adata = read_cellranger(samples)
+    adata_raw = read_cellranger(samples_raw)
 
-    adata = sc.read_h5ad(os.path.join(outpath, "adata_annotation.h5ad"))
-    print("## Running differential gene expression analysis")
-    dge_path = os.path.join(outpath, '06-DifferentialGeneExpression')
-    if not os.path.exists(dge_path):
-        os.makedirs(dge_path, exist_ok=True)
+    # create out dir if not exists
+    if not os.path.exists(outpath):
+        os.makedirs(outpath, exist_ok=True)
+
+    adata = run_qc(adata, adata_raw, outpath)
+
+    # adata = sc.read_h5ad(os.path.join(outpath, "adata_quality_control.h5ad"))
+    adata = run_normalization(adata, outpath)
+
+    # adata = sc.read_h5ad(os.path.join(outpath, "adata_normalisation.h5ad"))
+    adata = run_feature_selection(adata, outpath)
+
+    # adata = sc.read_h5ad(os.path.join(outpath, "adata_feature_selection.h5ad"))
+    adata = run_dim_reduction(adata, outpath)
+
+    # adata = sc.read_h5ad(os.path.join(outpath, "adata_dimensionality_reduction.h5ad"))
+    adata = run_clustering(adata, outpath, resolutions)
 
     for res in resolutions:
-        adata_dge = run_dge(adata, dge_path, res, treat_group_regex, ctrl_group_regex)
-        # # adata_dge = run_dge_deseq(adata, outpath, resolutions, treat_group_regex, ctrl_group_regex)
+        print(f"## Running analysis for resolution {res}")
 
-        adata_sc = run_composition(adata, outpath, res)
+        res_path = os.path.join(outpath, f"06-resolution_{res}")
+        if not os.path.exists(res_path):
+            os.makedirs(res_path, exist_ok=True)
+
+
+        # adata = sc.read_h5ad(os.path.join(outpath, "adata_clustering.h5ad"))
+        adata = run_annotation(adata, res_path, res, markers)
+
+        # adata = sc.read_h5ad(os.path.join(res_path, f"adata_annotation.{res}.h5ad"))
+        dge_path = os.path.join(res_path, '07-DifferentialGeneExpression')
+        if not os.path.exists(dge_path):
+            os.makedirs(dge_path, exist_ok=True)
+        adata_dge = run_dge(adata, dge_path, res, ctrl_group_regex)
+        # adata_dge = run_dge_deseq(adata, outpath, resolutions, ctrl_group_regex)
+
+        adata_sc = run_composition(adata, res_path, res)
 
         # adata_dge = sc.read_h5ad(os.path.join(outpath, "adata_dge.h5ad"))
-        adata_gsea = run_gsea(adata_dge, outpath, dge_path, resolutions, treat_group_regex, ctrl_group_regex)
+        adata_gsea = run_gsea(adata_dge, res_path, dge_path, res, ctrl_group_regex)
 
     print("Done")
 
-samples = {
-    "FL_T": "/storage/Documents/service/externe/ilan/20241209_scRNAseq_FL_SA/cellranger/FL_T/filtered_feature_bc_matrix.h5",
-    "V_T": "/storage/Documents/service/externe/ilan/20241209_scRNAseq_FL_SA/cellranger/V_T/filtered_feature_bc_matrix.h5",
-}
-samples_raw = {
-    "FL_T": "/home/jflucier/Documents/service/externe/ilan/20241209_scRNAseq_FL_SA/cellranger/FL_T/raw_feature_bc_matrix.h5",
-    "V_T": "/home/jflucier/Documents/service/externe/ilan/20241209_scRNAseq_FL_SA/cellranger/V_T/raw_feature_bc_matrix.h5",
-}
 
-treat_group_regex = "FL"
-ctrl_group_regex = "V"
+if __name__ == '__main__':
 
-# leiden resolutions to process
-# resolutions = [0.10, 0.25, 0.50, 1.00]
-resolutions = [0.10]
+    argParser = argparse.ArgumentParser()
 
-## Marker gene set
-marker_genes = {
-    "CD45": ["Ptprc"],
-    "CD8+ T": ["Cd8a", "Cd8b1", "Gzmk", "Nkg7"],
-    "CD4+ T": ["Cd4", "Ctla4", "Icos"],
-    "CD3+ T": ["Cd3d", "Cd3e", "Cd3g", "Lck"],
-    "B cells": ["Cd79a", "Cd79b", "Ighm"], #"Cd19",
-    "NK cells": ["Gzma", "Klra4", "Nkg7", "Prf1"],
-    "Macrophages": ["Adgre1", "Cd14", "Fcgr3", "Mafb"],
-    "Monocytes": ["Ly6c2", "Spn", "Ccl2", "Ccl7"],
-    "cDCs": ["Xcr1", "Flt3", "Ccr7", "Cd86"],
-    "pDCs": ["Siglech", "Clec10a", "Clec12a", "Lair1"],
-    "Neutrophils": ["Csf3r", "Cxcl3"] #, "S100a8", "S100a9"
-}
+    # mandatory
+    argParser.add_argument(
+        "-o",
+        "--output",
+        help="output path",
+        required=True
+    )
 
-main(samples, outpath, resolutions, marker_genes, treat_group_regex, ctrl_group_regex)
+    argParser.add_argument(
+        "-c",
+        "--control",
+        help="control_group_regex",
+        required=True
+    )
+
+
+    # Define a custom argument type for a list of integers
+    def list_of_floats(arg):
+        return list(map(float, arg.split(',')))
+
+    argParser.add_argument(
+        "-r",
+        "--resolutions",
+        help="Comma seperated list of float values used for leiden resolutions (format: 0.1,0.25)",
+        required=True,
+        type=list_of_floats,
+        default=[0.1, 0.25],
+    )
+
+    argParser.add_argument(
+        "-s",
+        "--samplesheet",
+        help="TSV file detailling samples to be processed. Format: sample_name\\tcellranger_filtered_matrix_path\\tcellranger_raw_matrix_path",
+        required=True,
+        type=argparse.FileType('r', encoding='UTF-8')
+    )
+
+    argParser.add_argument(
+        "-m",
+        "--markers_tsv",
+        help="TSV file detailling gene markers to monitor. Format: celltype_name\\tcomma_seperated_list_of_genesymbols",
+        required=True,
+        type=argparse.FileType('r', encoding='UTF-8')
+    )
+
+    args = argParser.parse_args()
+
+    samples_tsv = args.samplesheet
+    markers_tsv = args.markers_tsv
+    outpath = args.output
+    ctrl_group_regex = args.control
+    resolutions = args.resolutions
+
+    # samples = {
+    #     "SA_T": "/storage/Documents/service/externe/ilan/20241209_scRNAseq_FL_SA/cellranger_matrix/SA_T/filtered_feature_bc_matrix.h5",
+    #     "FL_T": "/storage/Documents/service/externe/ilan/20241209_scRNAseq_FL_SA/cellranger_matrix/FL_T/filtered_feature_bc_matrix.h5",
+    #     "V_T":  "/storage/Documents/service/externe/ilan/20241209_scRNAseq_FL_SA/cellranger_matrix/V_T/filtered_feature_bc_matrix.h5",
+    # }
+    # samples_raw = {
+    #     "SA_T": "/storage/Documents/service/externe/ilan/20241209_scRNAseq_FL_SA/cellranger_matrix/SA_T/raw_feature_bc_matrix.h5",
+    #     "FL_T": "/storage/Documents/service/externe/ilan/20241209_scRNAseq_FL_SA/cellranger_matrix/FL_T/raw_feature_bc_matrix.h5",
+    #     "V_T":  "/storage/Documents/service/externe/ilan/20241209_scRNAseq_FL_SA/cellranger_matrix/V_T/raw_feature_bc_matrix.h5",
+    # }
+    # samples = {
+    #     "SA_NK": "/storage/Documents/service/externe/ilan/20241209_scRNAseq_FL_SA/cellranger_matrix/SA_NK/filtered_feature_bc_matrix.h5",
+    #     "FL_NK": "/storage/Documents/service/externe/ilan/20241209_scRNAseq_FL_SA/cellranger_matrix/FL_NK/filtered_feature_bc_matrix.h5",
+    #     "V_NK":  "/storage/Documents/service/externe/ilan/20241209_scRNAseq_FL_SA/cellranger_matrix/V_NK/filtered_feature_bc_matrix.h5",
+    # }
+    # samples_raw = {
+    #     "SA_NK": "/storage/Documents/service/externe/ilan/20241209_scRNAseq_FL_SA/cellranger_matrix/SA_NK/raw_feature_bc_matrix.h5",
+    #     "FL_NK": "/storage/Documents/service/externe/ilan/20241209_scRNAseq_FL_SA/cellranger_matrix/FL_NK/raw_feature_bc_matrix.h5",
+    #     "V_NK":  "/storage/Documents/service/externe/ilan/20241209_scRNAseq_FL_SA/cellranger_matrix/V_NK/raw_feature_bc_matrix.h5",
+    # }
+    #
+    # outpath = "/storage/Documents/service/externe/ilan/20241209_scRNAseq_FL_SA/out/NK_analysis"
+    #
+    # # treat_group_regex = "FL"
+    # ctrl_group_regex = "V_NK"
+    #
+    # # leiden resolutions to process
+    # # resolutions = [0.10, 0.25, 0.50, 1.00]
+    # resolutions = [0.10, 0.25]
+    #
+    # ## Marker gene set
+    # marker_genes = {
+    #     "CD45": ["Ptprc"],
+    #     "CD8+ T": ["Cd8a", "Cd8b1", "Gzmk", "Nkg7"],
+    #     "CD4+ T": ["Cd4", "Ctla4", "Icos"],
+    #     "CD3+ T": ["Cd3d", "Cd3e", "Cd3g", "Lck"],
+    #     "B cells": ["Cd79a", "Cd79b", "Ighm"], #"Cd19",
+    #     "NK cells": ["Gzma", "Klra4", "Nkg7", "Prf1"],
+    #     "Macrophages": ["Adgre1", "Cd14", "Fcgr3", "Mafb"],
+    #     "Monocytes": ["Ly6c2", "Spn", "Ccl2", "Ccl7"],
+    #     "cDCs": ["Xcr1", "Flt3", "Ccr7", "Cd86"],
+    #     "pDCs": ["Siglech", "Clec10a", "Clec12a", "Lair1"],
+    #     "Neutrophils": ["Csf3r", "Cxcl3"] #, "S100a8", "S100a9"
+    # }
+
+    markers_df = pd.read_csv(markers_tsv, sep='\t', header=0, index_col=0, encoding='utf-8')
+    marker_genes = {}
+    for celltype, row in markers_df.iterrows():
+        markers_list = row['markers'].split(',')
+        marker_genes[celltype] = [marker.strip() for marker in markers_list if marker.strip() != '']
+
+    samples_df = pd.read_csv(samples_tsv, sep='\t', header=0, index_col=0, encoding='utf-8')
+    samples = {}
+    samples_raw = {}
+    for name, row in samples_df.iterrows():
+        samples[name] = row['filtered_matrix_path']
+        samples_raw[name] = row['raw_matrix_path']
+
+    main(samples, samples_raw, outpath, resolutions, marker_genes, ctrl_group_regex)
 
 
 # def plot_heatmap(pdf, adata, group_key, group_name="cell_type", groupby="label", LOG_FOLD_CHANGE=1.0, FDR=0.05):
