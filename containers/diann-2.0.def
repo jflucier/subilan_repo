@@ -1,0 +1,21 @@
+# to build: singularity build --force --fakeroot diann-2.0.sif diann-2.0.def
+# to test: singularity exec -e diann-2.0.sif diann-linux -h
+Bootstrap: docker
+From: ubuntu
+
+%environment
+LANG=en_US.UTF-8
+LANGUAGE=en_US:en
+LC_ALL=en_US.UTF-8
+export PATH=/diann-2.1.0:$PATH
+
+%post
+apt-get update && apt-get upgrade -y
+apt-get install -y wget unzip libgomp1 locales
+locale-gen en_US.UTF-8
+update-locale LANG=en_US.UTF-8
+
+cd /
+wget https://github.com/vdemichev/DiaNN/releases/download/2.0/DIA-NN-2.1.0-Academia-Linux.zip
+unzip DIA-NN-2.1.0-Academia-Linux.zip
+chmod -R 775 /diann-2.1.0
