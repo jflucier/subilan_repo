@@ -1,4 +1,4 @@
-# to build: singularity build --force --fakeroot diann-2.0.sif diann-2.0.def
+# to build: singularity build --force --fakeroot diann-2.1.0.sif diann-2.1.0.def
 # to test: singularity exec -e diann-2.0.sif diann-linux -h
 Bootstrap: docker
 From: ubuntu
