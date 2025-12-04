@@ -87,7 +87,7 @@ def run_splicing(o, label, pd_rep, splicing_data, ref):
     print(f"  -> Splicing Delta-PSI Cutoff ({label}): mean(|diff|) + 1*stdev = {threshold:.4f}")
     filtered_difference = transcript_difference.loc[abs_diff >= threshold]
     filtered_difference = filtered_difference.sort_values(by='avg_diff', ascending=True)
-    filtered_difference.to_csv(f"{o}/tcga.splicing.{label}.tsv", sep="\t")
+    filtered_difference.to_csv(f"{o}/tcga.splicing.{label}.hits.tsv", sep="\t")
 
 
 def analyse_tcga(report, splicing_rep, comp, ref, o):
