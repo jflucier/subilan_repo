@@ -82,7 +82,7 @@ def run_splicing(o, label, pd_rep, splicing_data, ref):
 
     # Calculate the filtering threshold: mean + 1 * stdev
     # This filters out transcripts whose absolute change is below the majority.
-    threshold = mean_abs_diff + (2 * std_abs_diff)
+    threshold = mean_abs_diff + (3 * std_abs_diff)
 
     print(f"  -> Splicing Delta-PSI Cutoff ({label}): mean(|diff|) + 1*stdev = {threshold:.4f}")
     filtered_difference = transcript_difference.loc[abs_diff >= threshold]
