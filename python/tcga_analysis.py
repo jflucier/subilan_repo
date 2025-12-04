@@ -53,8 +53,17 @@ def run_splicing(o, label, pd_rep, splicing_data, ref):
     # Samples belonging to the low expression group
     low_splice = pd_splice[[s for s in low_samples if s in pd_splice.columns]]
 
-    high_splice.T.to_csv(f"{o}/tcga.splicing.{label}.rawhigh.tsv", sep='\t', index=True)
-    low_splice.T.to_csv(f"{o}/tcga.splicing.{label}.rawlow.tsv", sep='\t', index=True)
+    # 1. Transpose the dataframes so samples are rows (as required for output)
+    high_t = high_splice.T
+    low_t = low_splice.T
+
+    # 2. Add the reference group label column to each set
+    high_t['ref_group'] = 'HIGH'
+    low_t['ref_group'] = 'LOW'
+
+    # 3. Concatenate the two dataframes into a single result
+    combined_raw_data = pd.concat([high_t, low_t])
+    combined_raw_data.to_csv(f"{o}/tcga.splicing.{label}.raw.tsv", sep='\t', index=True)
 
     # Calculate the row-wise (transcript-wise) average expression
     high_avg = high_splice.mean(axis=1)
