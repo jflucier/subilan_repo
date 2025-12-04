@@ -17,7 +17,8 @@ library("ComplexHeatmap")
 library("gplots")
 
 all_files <- c(
-  "/storage/Documents/service/externe/lcfortier/20241010_cneonatale/heatmap/20241010_cneonatale_prophage_vs_strains.presence.tsv"
+  "/storage/Documents/service/externe/ilan/20251113_socs1_vs_splicefactors_tcga/correlation_clustering.filtered0.4.surv.estimateQ4.tsv",
+  "/storage/Documents/service/externe/ilan/20251113_socs1_vs_splicefactors_tcga/correlation_clustering.filtered0.4.surv.tsv"
 )
 
 for (f in all_files) {
@@ -39,7 +40,8 @@ for (f in all_files) {
   heatmap.2(
     d,
     trace="none",
-    col=c("#FFFFFF", "#000000"),
+    #col=c("#FFFFFF", "#000000"),
+    col="heat.colors",
     scale="none",
     #RowSideColor=CLASS,
     dendrogram="both",
@@ -54,7 +56,7 @@ for (f in all_files) {
   heatmap.2(
     d,
     trace="none",
-    col=c("#FFFFFF", "#000000"),
+    #col=c("#FFFFFF", "#000000"),
     scale="none",
     #RowSideColor=CLASS,
     dendrogram="both",

@@ -1,10 +1,10 @@
 # install.packages("SomaDataIO")
 #
-if (!requireNamespace("BiocManager", quietly = TRUE)) {
-  install.packages("BiocManager")
-}
-BiocManager::install("Biobase")
-install.packages("tidyverse")
+# if (!requireNamespace("BiocManager", quietly = TRUE)) {
+#   install.packages("BiocManager")
+# }
+# BiocManager::install("Biobase")
+# install.packages("tidyverse")
 
 suppressPackageStartupMessages(library("optparse"))
 suppressPackageStartupMessages(library("tidyverse"))
@@ -26,9 +26,10 @@ adat_f <- opt$adat
 annot_f <- opt$samples
 comp_name <- opt$comp_name
 
-# adat_f <- "/storage/Documents/service/externe/sheela/20240606_LC_exercice_somalogic/results.take3/SS-2453319_v4.1_EDTAPlasma.hybNorm.medNormInt.plateScale.calibrate.anmlQC.qcCheck.anmlSMP.20240528.adat"
-# annot_f <- "/storage/Documents/service/externe/sheela/20240606_LC_exercice_somalogic/results.take3/plate_sample_annot.tsv"
-# outpath <- "/storage/Documents/service/externe/sheela/20240606_LC_exercice_somalogic/results.take3"
+# adat_f <- "/storage/Documents/service/externe/sheela/20240606_LC_exercice_somalogic/results/SS-2453319_v4.1_EDTAPlasma.hybNorm.medNormInt.plateScale.calibrate.anmlQC.qcCheck.anmlSMP.20240528.adat"
+# annot_f <- "/storage/Documents/service/externe/sheela/20240606_LC_exercice_somalogic/results/plate_sample_annot.tsv"
+# outpath <- "/storage/Documents/service/externe/sheela/20240606_LC_exercice_somalogic/results.take4"
+# comp_name <- "CompE"
 
 my_adat <- read_adat(adat_f)
 annot_tbl <- read.csv(
@@ -39,29 +40,45 @@ annot_tbl <- read.csv(
   stringsAsFactors=FALSE
 )
 
-my_adat[ , 'SubjectID_new'] <- NA
-my_adat$SubjectID_new <- annot_tbl[match(row.names(my_adat), row.names(annot_tbl)),"SubjectID_new"]
-
-my_adat[ , 'group'] = NA
-my_adat$group <- annot_tbl[match(row.names(my_adat), row.names(annot_tbl)),"group"]
-
-my_adat[ , 'sex'] = NA
-my_adat$sex <- annot_tbl[match(row.names(my_adat), row.names(annot_tbl)),"sex"]
-
-my_adat[ , 'exercice'] = NA
-my_adat$exercice <- annot_tbl[match(row.names(my_adat), row.names(annot_tbl)),"exercice"]
-
-my_adat[ , 'CompE'] = NA
-my_adat$CompE <- annot_tbl[match(row.names(my_adat), row.names(annot_tbl)),"CompE"]
-
-my_adat[ , 'CompNE'] = NA
-my_adat$CompNE <- annot_tbl[match(row.names(my_adat), row.names(annot_tbl)),"CompNE"]
+# my_adat[ , 'SubjectID_new'] <- NA
+# my_adat$SubjectID_new <- annot_tbl[match(row.names(my_adat), row.names(annot_tbl)),"SubjectID_new"]
+# 
+# my_adat[ , 'group'] = NA
+# my_adat$group <- annot_tbl[match(row.names(my_adat), row.names(annot_tbl)),"group"]
+# 
+# my_adat[ , 'sex'] = NA
+# my_adat$sex <- annot_tbl[match(row.names(my_adat), row.names(annot_tbl)),"sex"]
+# 
+# my_adat[ , 'exercice'] = NA
+# my_adat$exercice <- annot_tbl[match(row.names(my_adat), row.names(annot_tbl)),"exercice"]
+# 
+# my_adat[ , 'CompE'] = NA
+# my_adat$CompE <- annot_tbl[match(row.names(my_adat), row.names(annot_tbl)),"CompE"]
+# 
+# my_adat[ , 'CompNE'] = NA
+# my_adat$CompNE <- annot_tbl[match(row.names(my_adat), row.names(annot_tbl)),"CompNE"]
 
 cleanData <- my_adat |>
+  # Convert my_adat row names to a column named 'annot_id'
+  rownames_to_column("annot_id") |>
+  # Join with annot_tbl on the common 'annot_id' column
+  left_join(annot_tbl, by = "annot_id") |>
   filter(SampleType == "Sample") |>
   drop_na((!!as.symbol(comp_name)))
 
 raw <- as.data.frame(cleanData)
+raw_filtered <- raw %>%
+  select(!starts_with("seq."))
+out=paste(outpath,"/adat.raw.filtered.tsv",sep='')
+write.table(
+  raw_filtered,
+  file = out,
+  sep = "\t",
+  row.names = TRUE,
+  col.names = TRUE
+)
+
+
 # output raw data to tsv
 out=paste(outpath,"/adat.raw.t.tsv",sep='')
 write.table(

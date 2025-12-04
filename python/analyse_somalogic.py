@@ -45,20 +45,26 @@ def gen_stats(adat, targets, comp_name, lbl1, lbl2, outpath):
 
     # Group by 'group' column and calculate the mean for each group
     group_means = selected_rows.groupby(comp_name).mean()
+    # Corrected section for swapping
+    group_means_transposed = group_means.T
+    group_means_transposed = group_means_transposed.rename(columns={lbl1: f"avg_{lbl1}", lbl2: f"avg_{lbl2}"})
+
     # Group by 'group' column and calculate the standard deviation for each group
     group_std = selected_rows.groupby(comp_name).std()
+    group_std_transposed = group_std.T
+    group_std_transposed = group_std_transposed.rename(columns={lbl1: f"stdev_{lbl1}", lbl2: f"stdev_{lbl2}"})
 
     # Compute log2 fold change of the group means
     log2_fold_change = np.log2(group_means.loc[lbl1] / group_means.loc[lbl2])
     stats = log2_fold_change.reset_index()
     stats.columns = ['feature', 'log2fc']
-    group_means = group_means.reset_index()
-    group_means_transposed = group_means.T
-    group_means_transposed.columns = [f"avg_{lbl1}", f"avg_{lbl2}"]
+    # group_means = group_means.reset_index()
+    # group_means_transposed = group_means.T
+    # group_means_transposed.columns = [f"avg_{lbl1}", f"avg_{lbl2}"]
     stats = stats.merge(group_means_transposed, left_on='feature', right_index=True, how='left')
-    group_std = group_std.reset_index()
-    group_std_transposed = group_std.T
-    group_std_transposed.columns = [f"stdev_{lbl1}", f"stdev_{lbl2}"]
+    # group_std = group_std.reset_index()
+    # group_std_transposed = group_std.T
+    # group_std_transposed.columns = [f"stdev_{lbl1}", f"stdev_{lbl2}"]
     stats = stats.merge(group_std_transposed, left_on='feature', right_index=True, how='left')
 
 
@@ -67,7 +73,7 @@ def gen_stats(adat, targets, comp_name, lbl1, lbl2, outpath):
     group2_data = selected_rows[selected_rows[comp_name] == lbl2].drop(columns=comp_name)
     p_values = []
     for col in group1_data.columns:
-        t_stat, p_val = ttest_ind(group1_data[col], group2_data[col])
+        t_stat, p_val = ttest_ind(group1_data[col], group2_data[col], nan_policy='omit')
         p_values.append(p_val)
     stats['p_value'] = p_values
 
@@ -162,6 +168,9 @@ def gen_heatmap(adat, stats_ann, comp_name, lbl1, lbl2, outpath):
     filtered_adat = adat[cols]
 
     selected_rows = filtered_adat[(filtered_adat[comp_name] == lbl1) | (filtered_adat[comp_name] == lbl2)]
+    df_no_seq = selected_rows.filter(regex='^(?!seq_).*$')
+    transposed_df = df_no_seq.T
+    transposed_df.to_csv(os.path.join(outpath, f'{lbl1}vs{lbl2}.allrows.tsv'), sep='\t', index=False)
 
     # Filter features based on conditions
     filtered_features = stats_ann[
