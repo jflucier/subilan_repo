@@ -63,6 +63,7 @@ def run_splicing(o, label, pd_rep, splicing_data, ref):
 
     # 3. Concatenate the two dataframes into a single result
     combined_raw_data = pd.concat([high_t, low_t])
+    combined_raw_data = combined_raw_data.sort_values(by='ref_group', ascending=False)
     combined_raw_data.to_csv(f"{o}/tcga.splicing.{label}.raw.tsv", sep='\t', index=True)
 
     # Calculate the row-wise (transcript-wise) average expression
@@ -85,7 +86,7 @@ def run_splicing(o, label, pd_rep, splicing_data, ref):
 
     print(f"  -> Splicing Delta-PSI Cutoff ({label}): mean(|diff|) + 1*stdev = {threshold:.4f}")
     filtered_difference = transcript_difference.loc[abs_diff >= threshold]
-
+    filtered_difference = filtered_difference.sort_values(by='avg_diff', ascending=True)
     filtered_difference.to_csv(f"{o}/tcga.splicing.{label}.tsv", sep="\t")
 
 
