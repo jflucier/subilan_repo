@@ -35,7 +35,39 @@ def run_correlation(label, pd_rep, ref):
     tmp = tmp.rename(columns={ref: label})
     return tmp
 
-def run_splicing(o, label, pd_rep, splicing_data, ref):
+def run_splicing_tpm(o, label, pd_rep, tpm_data, ref):
+    low, high = pd_rep[ref].quantile([0.25, 0.75])
+    # Filter 'pd_rep' to get sample IDs for low- and high-expression groups
+    low_samples = pd_rep.loc[pd_rep[ref] <= low].index.tolist()
+    high_samples = pd_rep.loc[pd_rep[ref] >= high].index.tolist()
+
+    # Combine sample lists for filtering the large splicing data
+    all_filtered_samples = low_samples + high_samples
+    # Ensure all filtered samples exist in the splicing data columns to avoid errors
+    existing_samples = [s for s in all_filtered_samples if s in tpm_data.columns]
+    # The result 'pd_splice' has Transcript IDs as index and Sample IDs as columns.
+    pd_splice = tpm_data[existing_samples].copy()
+
+    # Samples belonging to the high expression group
+    high_splice = pd_splice[[s for s in high_samples if s in pd_splice.columns]]
+    # Samples belonging to the low expression group
+    low_splice = pd_splice[[s for s in low_samples if s in pd_splice.columns]]
+
+    # 1. Transpose the dataframes so samples are rows (as required for output)
+    high_t = high_splice.T
+    low_t = low_splice.T
+
+    # 2. Add the reference group label column to each set
+    high_t['ref_group'] = 'HIGH'
+    low_t['ref_group'] = 'LOW'
+
+    # 3. Concatenate the two dataframes into a single result
+    combined_raw_data = pd.concat([high_t, low_t])
+    combined_raw_data = combined_raw_data.sort_values(by='ref_group', ascending=False)
+    combined_raw_data.T.to_csv(f"{o}/splicing/tpm/tcga.tpm.{label}.raw.tsv", sep='\t', index=True)
+
+
+def run_splicing_isopct(o, label, pd_rep, splicing_data, ref):
     low, high = pd_rep[ref].quantile([0.25, 0.75])
     # Filter 'pd_rep' to get sample IDs for low- and high-expression groups
     low_samples = pd_rep.loc[pd_rep[ref] <= low].index.tolist()
@@ -64,7 +96,7 @@ def run_splicing(o, label, pd_rep, splicing_data, ref):
     # 3. Concatenate the two dataframes into a single result
     combined_raw_data = pd.concat([high_t, low_t])
     combined_raw_data = combined_raw_data.sort_values(by='ref_group', ascending=False)
-    combined_raw_data.to_csv(f"{o}/tcga.splicing.{label}.raw.tsv", sep='\t', index=True)
+    combined_raw_data.to_csv(f"{o}/splicing/isopct/tcga.isopct.{label}.raw.tsv", sep='\t', index=True)
 
     # Calculate the row-wise (transcript-wise) average expression
     high_avg = high_splice.mean(axis=1)
@@ -87,12 +119,16 @@ def run_splicing(o, label, pd_rep, splicing_data, ref):
     print(f"  -> Splicing Delta-PSI Cutoff ({label}): mean(|diff|) + 1*stdev = {threshold:.4f}")
     filtered_difference = transcript_difference.loc[abs_diff >= threshold]
     filtered_difference = filtered_difference.sort_values(by='avg_diff', ascending=True)
-    filtered_difference.to_csv(f"{o}/tcga.splicing.{label}.hits.tsv", sep="\t")
+    filtered_difference.to_csv(f"{o}/splicing/isopct/tcga.isopct.{label}.hits.tsv", sep="\t")
 
 
-def analyse_tcga(report, splicing_rep, comp, ref, o):
+def analyse_tcga(report, isopct_rep, tpm_rep, comp, ref, o):
+    print(f"reading database tcga + estimates report {report}")
     all_data = pd.read_csv(report, sep='\t', index_col="sample")
-    splicing_data = pd.read_csv(splicing_rep, sep='\t', index_col="sample")
+    print(f"reading isopct report {isopct_rep}")
+    splicing_data = pd.read_csv(isopct_rep, sep='\t', index_col="sample")
+    print(f"reading TPM report {tpm_rep}")
+    tpm_data = pd.read_csv(tpm_rep, sep='\t', index_col="sample")
     comparisons = pd.read_csv(comp, sep='\t', index_col="label")
     res_all = None
     res_tcga = None
@@ -118,8 +154,8 @@ def analyse_tcga(report, splicing_rep, comp, ref, o):
         else:
             res_tcga = res_tcga.merge(tmp, left_index=True, right_index=True, how='outer')
 
-        run_splicing(o, label, pd_rep, splicing_data, ref)
-
+        run_splicing_isopct(o, label, pd_rep, splicing_data, ref)
+        run_splicing_tpm(o, label, pd_rep, tpm_data, ref)
         # filter data based on category field using gtex samples
         # print(f"running {label} on gtex samples")
         # pd_rep = all_data.loc[(all_data['category'] == row['n_category'])].copy()
@@ -252,9 +288,16 @@ if __name__ == '__main__':
     )
 
     argParser.add_argument(
-        "-s",
-        "--gtex_splicing_report",
+        "-pct",
+        "--gtex_isopct_report",
         help="gtex splcing file TcgaTargetGtex_rsem_isopct",
+        required=True
+    )
+
+    argParser.add_argument(
+        "-tpm",
+        "--gtex_tpm_report",
+        help="gtex splcing file TcgaTargetGtex_rsem_isoform_tpm",
         required=True
     )
 
@@ -320,7 +363,8 @@ if __name__ == '__main__':
 
     analyse_tcga(
         args.tcga_report,
-        args.gtex_splicing_report,
+        args.gtex_isopct_report,
+        args.gtex_tpm_report,
         args.comparisons,
         args.reference,
         args.out_prefix
