@@ -57,10 +57,10 @@ def process_tsv_file(input_filename, output_basepath):
     print(f"Applying inverse log2 transformation to data...")
     df_transformed = df_expression.apply(reverse_log2_tpm, axis=0)
 
-    print("Removing version numbers (.X) from isoform IDs in the index...")
-    # --- CORRECTED LINE ---
-    df_transformed.index = df_transformed.index.map(lambda x: x.split('.')[0])
-    # ----------------------
+    # print("Removing version numbers (.X) from isoform IDs in the index...")
+    # # --- CORRECTED LINE ---
+    # df_transformed.index = df_transformed.index.map(lambda x: x.split('.')[0])
+    # # ----------------------
 
     # --- Split data based on ref_groups ---
     samples_low = ref_groups[ref_groups == 'LOW'].index.tolist()
