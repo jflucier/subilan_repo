@@ -37,7 +37,6 @@ def process_tsv_file(input_filename, output_basepath):
 
     print(f"Original data shape: {df_full.shape}")
 
-    # Extract the ref_group row as a Series (dictionary-like structure)
     if 'ref_group' in df_full.index:
         ref_groups = df_full.loc['ref_group']
         df_expression = df_full.drop('ref_group')
@@ -46,7 +45,6 @@ def process_tsv_file(input_filename, output_basepath):
         print("Error: 'ref_group' row not found in input file.")
         sys.exit(1)
 
-    # Convert expression data to numeric
     for col in df_expression.columns:
         df_expression[col] = pd.to_numeric(df_expression[col], errors='coerce')
 
@@ -60,15 +58,14 @@ def process_tsv_file(input_filename, output_basepath):
     df_transformed = df_expression.apply(reverse_log2_tpm, axis=0)
 
     print("Removing version numbers (.X) from isoform IDs in the index...")
-    df_transformed.index = df_transformed.index.map(lambda x: x.split('.')[])
+    # --- CORRECTED LINE ---
+    df_transformed.index = df_transformed.index.map(lambda x: x.split('.')[0])
+    # ----------------------
 
     # --- Split data based on ref_groups ---
-
-    # Get the list of samples for 'LOW' and 'HIGH' groups
     samples_low = ref_groups[ref_groups == 'LOW'].index.tolist()
     samples_high = ref_groups[ref_groups == 'HIGH'].index.tolist()
 
-    # Filter the transformed DataFrame for each group
     df_low = df_transformed[samples_low]
     df_high = df_transformed[samples_high]
 
@@ -89,11 +86,12 @@ if __name__ == "__main__":
         print("Example: python rsem_to_tpm.py input.tsv output/results/tcga_ACC")
         sys.exit(1)
 
-    input_file = sys.argv
-    output_base = sys.argv
+    # Corrected variable assignment from sys.argv list to string paths
+    input_file = sys.argv[1]
+    output_base = sys.argv[2]
 
     if os.path.exists(input_file):
-        # Ensure the output directory exists
+        # Ensure the output directory exists before writing files
         output_dir = os.path.dirname(output_base)
         if output_dir and not os.path.exists(output_dir):
             os.makedirs(output_dir, exist_ok=True)
