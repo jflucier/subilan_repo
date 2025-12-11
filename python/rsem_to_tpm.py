@@ -19,7 +19,7 @@ def reverse_log2_tpm(log2_value):
 def process_tsv_file(input_filename, output_filename):
     print(f"Reading data from: {input_filename}")
 
-    # Adding low_memory=False to suppress the DtypeWarning you saw earlier
+    # Read the TSV file. low_memory=False is used to suppress the DtypeWarning.
     df = pd.read_csv(input_filename, sep='\t', index_col=0, low_memory=False)
 
     print(f"Original data shape: {df.shape}")
@@ -37,26 +37,34 @@ def process_tsv_file(input_filename, output_filename):
 
     if df.select_dtypes(include=[np.number]).empty:
         print("Error: No numeric columns found to transform after cleaning.")
-        return
+        sys.exit(1)
 
     print(f"Applying inverse log2 transformation to data...")
     df = df.apply(reverse_log2_tpm, axis=0)
 
-    print(f"Saving linear TPM data to: {output_filename}")
-    df.to_csv(output_filename, sep='\t', index=True)
+    print(f"Saving linear TPM data to: {output_filename} with SUPPA-compatible header.")
+
+    # --- SUPPA-specific file writing logic ---
+    # 1. Manually write the header line with ONLY the sample names
+    #    (SUPPA expects no leading "sample\t" for the index column header)
+    header = df.columns.tolist()
+    header_line = '\t'.join(header) + '\n'
+
+    with open(output_filename, 'w') as f:
+        f.write(header_line)
+        # 2. Append the rest of the dataframe data, but without writing the header again
+        #    (index=True ensures the isoform IDs are written in the first column of data rows)
+        df.to_csv(f, sep='\t', header=False, index=True)
+        # ----------------------------------------
+
     print("Transformation complete.")
 
 
 if __name__ == "__main__":
-    # Check if exactly two extra arguments (input and output file paths) were provided
     if len(sys.argv) != 3:
         print("Usage: python script_name.py <input_file_path> <output_file_path>")
-        print("Example: python rsem_to_tpm.py input.tsv output.tsv")
-        sys.exit(1)  # Exit the script if arguments are incorrect
+        sys.exit(1)
 
-    # The first argument is the script name itself (sys.argv[0])
-    # The second argument is the input file path (sys.argv[1])
-    # The third argument is the output file path (sys.argv[2])
     input_file = sys.argv[1]
     output_file = sys.argv[2]
 
