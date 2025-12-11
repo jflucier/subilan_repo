@@ -42,18 +42,22 @@ def process_tsv_file(input_filename, output_filename):
     print(f"Applying inverse log2 transformation to data...")
     df = df.apply(reverse_log2_tpm, axis=0)
 
-    print(f"Saving linear TPM data to: {output_filename} with SUPPA-compatible header.")
+    # --- NEW STEP: Remove version numbers from the index (isoform IDs) ---
+    print("Removing version numbers (.X) from isoform IDs in the index...")
+    # This splits 'ENST00000548312.5' at the dot and keeps the first part
+    df.index = df.index.map(lambda x: x.split('.')[0])
+
+    print(f"Saving linear TPM data to: {output_filename} with SUPPA-compatible format.")
 
     # --- SUPPA-specific file writing logic ---
-    # 1. Manually write the header line with ONLY the sample names
-    #    (SUPPA expects no leading "sample\t" for the index column header)
+    # Manually write the header line with ONLY the sample names (no leading blank column name)
     header = df.columns.tolist()
     header_line = '\t'.join(header) + '\n'
 
     with open(output_filename, 'w') as f:
         f.write(header_line)
-        # 2. Append the rest of the dataframe data, but without writing the header again
-        #    (index=True ensures the isoform IDs are written in the first column of data rows)
+        # Append the rest of the dataframe data, without writing the header again
+        # (index=True ensures the modified isoform IDs are written in the first column of data rows)
         df.to_csv(f, sep='\t', header=False, index=True)
         # ----------------------------------------
 
@@ -65,8 +69,8 @@ if __name__ == "__main__":
         print("Usage: python script_name.py <input_file_path> <output_file_path>")
         sys.exit(1)
 
-    input_file = sys.argv[1]
-    output_file = sys.argv[2]
+    input_file = sys.argv
+    output_file = sys.argv
 
     if os.path.exists(input_file):
         process_tsv_file(input_file, output_file)
