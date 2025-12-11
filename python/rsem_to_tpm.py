@@ -69,8 +69,8 @@ if __name__ == "__main__":
         print("Usage: python script_name.py <input_file_path> <output_file_path>")
         sys.exit(1)
 
-    input_file = sys.argv
-    output_file = sys.argv
+    input_file = sys.argv[1]
+    output_file = sys.argv[2]
 
     if os.path.exists(input_file):
         process_tsv_file(input_file, output_file)
