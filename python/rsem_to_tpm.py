@@ -45,7 +45,7 @@ def process_tsv_file(input_filename, output_filename):
     # --- NEW STEP: Remove version numbers from the index (isoform IDs) ---
     print("Removing version numbers (.X) from isoform IDs in the index...")
     # This splits 'ENST00000548312.5' at the dot and keeps the first part
-    df.index = df.index.map(lambda x: x.split('.')[0])
+    # df.index = df.index.map(lambda x: x.split('.')[0])
 
     print(f"Saving linear TPM data to: {output_filename} with SUPPA-compatible format.")
 
