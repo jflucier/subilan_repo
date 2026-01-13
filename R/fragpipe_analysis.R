@@ -55,12 +55,12 @@ in_design <- opt$design
 # in_design <- "/storage/Documents/service/externe/sheela/20250107_mice_colon_take2/experiment_annotation.tsv"
 
 # Helper to open the correct device
-open_device <- function(filename, format) {
-  full_path <- paste0(filename, ".", format)
+open_device <- function(filename_base, format) {
   if (tolower(format) == "svg") {
-    svg(full_path)
+    # %03d creates separate files for each plot (001, 002, etc.)
+    svg(paste0(filename_base, "%03d.svg"), width = 10, height = 8)
   } else {
-    pdf(full_path)
+    pdf(paste0(filename_base, ".pdf"), width = 10, height = 8)
   }
 }
 
