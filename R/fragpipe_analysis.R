@@ -37,6 +37,7 @@ suppressPackageStartupMessages(library(SEtools))
 
 option_list = list(
   make_option(c("-o", "--out"), type="character", default=NULL, help="output dir", metavar="character"),
+  make_option(c("-o", "--out"), type="character", default=NULL, help="output dir", metavar="character"),
   make_option(c("-m", "--matrix"), type="character", default=NULL, help="diann pg matrix filtered for proteotypic proteins", metavar="character"),
   make_option(c("-d", "--design"), type="character", default=NULL, help="Fragpipe TSV design file. Header is: file\tsample\tsample_name\tcondition\treplicate", metavar="character")
 );
@@ -44,6 +45,7 @@ option_list = list(
 opt_parser = OptionParser(option_list=option_list);
 opt = parse_args(opt_parser);
 
+out_fmt <- opt$format
 out_bp <- opt$out
 in_diann <- opt$matrix
 in_design <- opt$design
@@ -52,6 +54,15 @@ in_design <- opt$design
 # in_diann <- "/storage/Documents/service/externe/sheela/20250107_mice_colon_take2/report.pg_matrix.tsv"
 # in_design <- "/storage/Documents/service/externe/sheela/20250107_mice_colon_take2/experiment_annotation.tsv"
 
+# Helper to open the correct device
+open_device <- function(filename, format) {
+  full_path <- paste0(filename, ".", format)
+  if (tolower(format) == "svg") {
+    svg(full_path)
+  } else {
+    pdf(full_path)
+  }
+}
 
 if (!dir.exists(out_bp)){
   dir.create(out_bp, showWarnings = TRUE)
@@ -64,13 +75,10 @@ ccrcc <- make_se_from_files(
   level = "protein"
 )
 
-pdf(
-  paste0(out_bp,"/report.pg_matrix.proteoptypic.qc.pdf")
-)
-plot_pca(
-  ccrcc
-)
+open_device(paste0(out_bp,"/report.pg_matrix.proteoptypic.qc"), out_fmt)
 
+# pdf(paste0(out_bp,"/report.pg_matrix.proteoptypic.qc.pdf"))
+plot_pca(ccrcc)
 plot_correlation_heatmap(ccrcc)
 plot_missval_heatmap(ccrcc)
 plot_feature_numbers(ccrcc)
@@ -89,9 +97,8 @@ dev.off()
 # plot_feature_numbers(imputed)
 # dev.off()
 
-pdf(
-  paste0(out_bp,"/report.pg_matrix.proteoptypic.dge.pdf")
-)
+open_device(paste0(out_bp,"/report.pg_matrix.proteoptypic.dge"), out_fmt)
+# pdf(paste0(out_bp,"/report.pg_matrix.proteoptypic.dge.pdf"))
 
 group_list <- unique(ccrcc@colData@listData[["condition"]])
 ctrl <- grep(
