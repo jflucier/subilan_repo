@@ -36,7 +36,7 @@ suppressPackageStartupMessages(library(SEtools))
 # in_design <- "/storage/Documents/service/externe/sheela/20240829_HSCs_liver_mouse/experiment_annotation.outliers.tsv"
 
 option_list = list(
-  make_option(c("-f", "--format"), type="character", default="pdf", help="Output format: pdf or svg [default %default]", metavar="character")
+  make_option(c("-f", "--format"), type="character", default="pdf", help="Output format: pdf or svg [default %default]", metavar="character"),
   make_option(c("-o", "--out"), type="character", default=NULL, help="output dir", metavar="character"),
   make_option(c("-m", "--matrix"), type="character", default=NULL, help="diann pg matrix filtered for proteotypic proteins", metavar="character"),
   make_option(c("-d", "--design"), type="character", default=NULL, help="Fragpipe TSV design file. Header is: file\tsample\tsample_name\tcondition\treplicate", metavar="character")
