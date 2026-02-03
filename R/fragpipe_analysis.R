@@ -21,11 +21,11 @@
 suppressPackageStartupMessages(library(FragPipeAnalystR))
 suppressPackageStartupMessages(library("optparse"))
 suppressPackageStartupMessages(library(SEtools))
-library(ggplot2)
-library(Polychrome)
-library(dplyr)
-library(tibble)
-library(pals)
+suppressPackageStartupMessages(library(ggplot2))
+suppressPackageStartupMessages(library(Polychrome))
+suppressPackageStartupMessages(library(dplyr))
+suppressPackageStartupMessages(library(tibble))
+suppressPackageStartupMessages(library(pals))
 
 # bp <- "/storage/Documents/service/externe/sheela/20240829_HSCs_liver_mouse"
 # out_bp <- paste0(bp,"/fragpipe")
