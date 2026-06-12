@@ -71,7 +71,7 @@ print("---------------------------------\n")
 
 # 4. Stream and filter using chunks
 chunk_size = 10000
-output_filename = "filtered_output.csv"
+output_filename = "redcap.filtered_output.csv"
 
 first_chunk = True
 for chunk in pd.read_csv(csv_filename, usecols=valid_columns, chunksize=chunk_size, low_memory=False):
