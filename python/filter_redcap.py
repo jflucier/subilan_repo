@@ -5,7 +5,7 @@ with open("redcap_tokeep.txt", "r", encoding="utf-8") as f:
     # Strip spaces/newlines, lower case, and drop trailing punctuation like ':' or '?'
     columns_to_keep = [line.strip() for line in f if line.strip()]
 
-csv_filename = "/jbod2/def-gimap5/20250923_BQC19/data/clinical/redcap_clinical_data_raw_2024-04-11.csv"
+csv_filename = "/jbod2/def-gimap5/20250923_BQC19/data/clinical/redcap_clinical_data_label_2024-04-11.csv"
 header = pd.read_csv(csv_filename, nrows=0).columns.tolist()
 
 
