@@ -4,59 +4,63 @@ import pandas as pd
 with open("redcap_tokeep.txt", "r", encoding="utf-8") as f:
     columns_to_keep = [line.strip() for line in f if line.strip()]
 
+# SWITCHED TO THE LABEL CSV WHERE THE COLUMNS MATCH YOUR TEXT FILE BETTER
 csv_filename = "/jbod2/def-gimap5/20250923_BQC19/data/clinical/redcap_clinical_data_label_2024-04-11.csv"
 header = pd.read_csv(csv_filename, nrows=0).columns.tolist()
 
 
-# 2. Build a fuzzy mapping dictionary (maps normalized strings to exact raw columns)
+# 2. Build a normalized mapping dictionary
 def normalize(text):
     if not isinstance(text, str): return ""
-    # Lowercase, strip spaces, remove common punctuation/accents
     text = text.lower().strip().replace(":", "").replace("?", "").replace(" ", "").replace("_", "")
-    text = text.replace("√çge", "age").replace("âg", "age").replace("é", "e").replace("à", "a")
+    # Standardize broken encoding variants for Age and Fever
+    text = text.replace("√çge", "age").replace("âg", "age").replace("âge", "age").replace("age", "age")
+    text = text.replace("‚â•38.0", "380").replace("≥38.0", "380").replace(">=38.0", "380")
     return text
 
 
 raw_mapping = {normalize(col): col for col in header}
 
-# 3. Match columns dynamically and track misses
+# 3. Match columns dynamically
 valid_columns = []
 missed_columns = []
 
 for col in columns_to_keep:
     norm_col = normalize(col)
 
-    # Check 1: Direct exact match
+    # Check 1: Direct match
     if col in header:
         valid_columns.append(col)
     # Check 2: Fuzzy normalized match
     elif norm_col in raw_mapping:
         valid_columns.append(raw_mapping[norm_col])
-    # Check 3: Common structural synonyms
-    elif "sexe" in norm_col and "female" in header:
-        valid_columns.append("female")
-    elif "age" in norm_col and "age" in header:
-        valid_columns.append("age")
+    # Check 3: Explicit hardcoded overrides for the encoding glitches
+    elif "au recrutement" in norm_col and any("Âge au recrutement" in h for h in header):
+        valid_columns.append([h for h in header if "Âge au recrutement" in h][0])
+    elif "fever" in norm_col and "38.0" in norm_col:
+        # Catch both the standalone fever column and the reinfection choice column
+        matches = [h for h in header if "Fever" in h and "38.0" in h]
+        for m in matches:
+            if m not in valid_columns:
+                valid_columns.append(m)
     else:
         missed_columns.append(col)
 
-# Ensure our variant of BQCID is definitely added at the top
-id_col = "BQCID" if "BQCID" in header else ("BQC ID" if "BQC ID" in header else header[0])
+# Ensure BQC ID is at the top
+id_col = "BQC ID" if "BQC ID" in header else ("BQCID" if "BQCID" in header else header[0])
 if id_col not in valid_columns:
     valid_columns.insert(0, id_col)
 
-# Deduplicate valid columns list while keeping order
 valid_columns = list(dict.fromkeys(valid_columns))
 
-print(f"Successfully matched {len(valid_columns)} columns out of {len(columns_to_keep)} requests.")
+print(f"Successfully matched {len(valid_columns)} columns.")
 
-# --- NEW: Print Missed Columns ---
 print(f"\n--- MISSED COLUMNS ({len(missed_columns)}) ---")
 if missed_columns:
     for col in missed_columns:
         print(f"  - {col}")
 else:
-    print("  None! All columns matched successfully.")
+    print("  None! Perfect 100% column match achieved.")
 print("---------------------------------\n")
 
 # 4. Stream and filter using chunks
@@ -67,7 +71,6 @@ first_chunk = True
 for chunk in pd.read_csv(csv_filename, usecols=valid_columns, chunksize=chunk_size, low_memory=False):
     chunk = chunk[valid_columns]
 
-    # Standardize the ID header name to match your PCA script expectations
     if id_col in chunk.columns:
         chunk = chunk.rename(columns={id_col: "BQC ID"})
 
