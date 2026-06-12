@@ -22,6 +22,7 @@ def normalize(text):
 raw_mapping = {normalize(col): col for col in header}
 
 # 3. Match columns dynamically
+# 3. Match columns dynamically
 valid_columns = []
 missed_columns = []
 
@@ -34,11 +35,16 @@ for col in columns_to_keep:
     # Check 2: Fuzzy normalized match
     elif norm_col in raw_mapping:
         valid_columns.append(raw_mapping[norm_col])
-    # Check 3: Explicit hardcoded overrides for the encoding glitches
-    elif "au recrutement" in norm_col and any("Âge au recrutement" in h for h in header):
-        valid_columns.append([h for h in header if "Âge au recrutement" in h][0])
+    # Check 3: Targeted suffix/contains match for the Age column
+    elif "au recrutement" in norm_col:
+        # Pull the exact string header from the file that contains "recrutement"
+        age_match = [h for h in header if "recrutement" in h.lower()]
+        if age_match:
+            valid_columns.append(age_match[0])  # Append the string, not a list
+        else:
+            missed_columns.append(col)
+    # Check 4: Explicit overrides for the Fever column variations
     elif "fever" in norm_col and "38.0" in norm_col:
-        # Catch both the standalone fever column and the reinfection choice column
         matches = [h for h in header if "Fever" in h and "38.0" in h]
         for m in matches:
             if m not in valid_columns:
