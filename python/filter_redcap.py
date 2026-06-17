@@ -74,8 +74,25 @@ else:
 print("----------------------------------------------------------------\n")
 
 # 6. Flatten longitudinal records and save
-print("Flattening repeated longitudinal records to one row per patient...")
-flattened_df = raw_extracted_df.groupby("BQC ID", as_index=False).first()
+print("Flattening repeated longitudinal records to one row per patient using targeted logic...")
+
+# Define specialized columns that require mathematical maximums instead of earliest entries
+max_value_columns = [
+    "Did or does the patient receive ventilatory support?",
+    "Venous lactate:",
+    "D-Dimer:",
+    "IL-6:"
+]
+
+# We will separate the aggregation process into two steps to handle traits cleanly
+# Step A: Aggregate standard baseline features using the first populated value
+base_flattened = raw_extracted_df.groupby("BQC ID", as_index=False).first()
+
+# Step B: Aggregate highly dynamic physiological metrics using the maximum value observed
+metrics_flattened = raw_extracted_df.groupby("BQC ID", as_index=False)[max_value_columns].max()
+
+# Step C: Merge both profiles together on the BQC ID key
+flattened_df = pd.merge(base_flattened.drop(columns=max_value_columns), metrics_flattened, on="BQC ID")
 
 flattened_df.to_csv(final_filename, index=False)
 
