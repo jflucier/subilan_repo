@@ -8,7 +8,6 @@ with open("redcap_tokeep.txt", "r", encoding="utf-8") as f:
 csv_filename = "/jbod2/def-gimap5/20250923_BQC19/data/clinical/redcap_clinical_data_label_2024-04-11.csv"
 header = pd.read_csv(csv_filename, nrows=0).columns.tolist()
 
-
 # 2. Build a normalized mapping dictionary
 def normalize(text):
     if not isinstance(text, str): return ""
@@ -16,7 +15,6 @@ def normalize(text):
     text = text.replace("âge", "age").replace("âg", "age").replace("age", "age")
     text = text.replace("≥38.0", "380").replace(">=38.0", "380")
     return text
-
 
 raw_mapping = {normalize(col): col for col in header}
 
@@ -37,12 +35,11 @@ if id_col not in valid_columns:
 valid_columns = list(dict.fromkeys(valid_columns))
 print(f"Successfully matched {len(valid_columns)} columns.")
 
-# 4. Stream and filter using chunks into a temporary unflattened file
+# 4. Stream and filter using chunks into a temporary file
 chunk_size = 20000
 temp_filename = "filtered_output_raw.tmp"
 final_filename = "filtered_output.csv"
 
-# Remove any old runs hanging around to prevent cross-contamination
 for f in [temp_filename, final_filename]:
     if os.path.exists(f): os.remove(f)
 
@@ -50,25 +47,38 @@ print("Streaming and extracting matched columns from raw clinical file...")
 first_chunk = True
 for chunk in pd.read_csv(csv_filename, usecols=valid_columns, chunksize=chunk_size, low_memory=False):
     chunk = chunk[valid_columns]
-
-    # Standardize the ID header name to match downstream expectations
     if id_col in chunk.columns:
         chunk = chunk.rename(columns={id_col: "BQC ID"})
-
     chunk.to_csv(temp_filename, mode='a', index=False, header=first_chunk)
     first_chunk = False
 
-# 5. Load extracted data, flatten longitudinal rows, and save
-print("Flattening repeated longitudinal records to one row per patient...")
+# 5. Load extracted data
+print("Analyzing dataset for longitudinal value conflicts...")
 raw_extracted_df = pd.read_csv(temp_filename, low_memory=False)
 
-# Group by 'BQC ID' and grab the first populated (non-null) entry for each column
+# --- NEW: Identify columns with multiple distinct values per patient ---
+# Count unique non-null values per patient per column
+unique_counts = raw_extracted_df.groupby("BQC ID").nunique(dropna=True)
+
+# Find columns where any patient has more than 1 distinct value
+conflicting_cols = unique_counts.columns[(unique_counts > 1).any()].tolist()
+
+print(f"\n--- COLUMNS WITH MULTIPLE DISTINCT VALUES FOUND ({len(conflicting_cols)}) ---")
+if conflicting_cols:
+    for col in conflicting_cols:
+        # Calculate how many patients actually have conflicting rows for this variable
+        num_patients_conflicted = (unique_counts[col] > 1).sum()
+        print(f"  - {col} (found conflicts in {num_patients_conflicted} patients)")
+else:
+    print("  None! Every column holds perfectly consistent values across rows for all patients.")
+print("----------------------------------------------------------------\n")
+
+# 6. Flatten longitudinal records and save
+print("Flattening repeated longitudinal records to one row per patient...")
 flattened_df = raw_extracted_df.groupby("BQC ID", as_index=False).first()
 
-# Save clean flattened matrix
 flattened_df.to_csv(final_filename, index=False)
 
-# Clean up temp file
 if os.path.exists(temp_filename):
     os.remove(temp_filename)
 
