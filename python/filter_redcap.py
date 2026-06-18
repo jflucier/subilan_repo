@@ -33,12 +33,14 @@ for col in columns_to_keep:
         valid_columns.append(raw_mapping[norm_col])
 
 # Force ensure BQC ID variant is at the front
-id_col = "BQC ID" if "BQC ID" in header else ("BQCID" if "BQCID" in header else header)
+id_col = "BQC ID" if "BQC ID" in header else ("BQCID" if "BQCID" in header else header[0])
 if id_col not in valid_columns:
     valid_columns.insert(0, id_col)
 
+# This will now succeed cleanly because valid_columns only contains strings
 valid_columns = list(dict.fromkeys(valid_columns))
 print(f"Successfully matched {len(valid_columns)} columns cleanly.")
+
 
 # 4. Stream and filter using chunks into a temporary file
 chunk_size = 20000
