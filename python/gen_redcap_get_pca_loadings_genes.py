@@ -3,6 +3,7 @@ import numpy as np
 from sklearn.decomposition import PCA
 from sklearn.preprocessing import StandardScaler
 import mygene
+import math
 
 # 1. Reconstruct your PCA transformation steps
 print("Loading expression profile matrix...")
@@ -12,6 +13,20 @@ fpkm_df = pd.read_csv("fpkm_matrix_cleaned.tsv", sep="\t", index_col=0)
 pca_input = fpkm_df.T
 pca_input = pca_input.loc[:, pca_input.var() > 0.1]
 pca_input_log = np.log2(pca_input + 1)
+
+# --- DYNAMICALLY DETERMINE PRECISE GENE COUNT ---
+num_genes = pca_input.shape[1]
+uniform_baseline = 1.0 / math.sqrt(num_genes)
+# Set target threshold at 2.5 times background noise to extract true signals
+method1_threshold = 2.5 * uniform_baseline
+
+print("\n" + "=" * 75)
+print("📊 DYNAMIC MATHEMATICAL INTEGRITY AUDIT")
+print("=" * 75)
+print(f"  - Precise Number of Post-Variance Genes (N) : {num_genes}")
+print(f"  - Uniform Distribution Background Baseline   : {uniform_baseline:.5f}")
+print(f"  - Method 1 Mathematical Cutoff (2.5x Noise) : {method1_threshold:.5f}")
+print("=" * 75 + "\n")
 
 # Fit PCA to extract feature components
 scaler = StandardScaler()
@@ -27,22 +42,28 @@ loadings = pd.DataFrame(
     index=pca_input.columns
 )
 
-# 3. Export top driving variables with full BioMart annotations
-print("\n" + "=" * 115)
-print("🧬 TOP DRIVING GENES WITH BIOMART ANNOTATIONS 🧬")
-print("=" * 115)
-
+# 3. Process components and apply Method 1 filter
 mg = mygene.MyGeneInfo()
 
 for pc in ["PC1", "PC2"]:
     col = f"{pc}_Loading"
 
-    # Highest absolute weights indicate highest directional variance influence
-    top_genes = loadings[col].abs().sort_values(ascending=False).head(20)
-    top_signed_genes = loadings.loc[top_genes.index, [col]].copy()
+    # --- METHOD 1 DYNAMIC FILTER: Capture all genes exceeding the threshold ---
+    all_passing_genes = loadings[loadings[col].abs() >= method1_threshold].copy()
 
-    # Batch query BioMart for Symbols and Names via mygene
-    ensembl_ids = top_signed_genes.index.tolist()
+    # Sort by absolute strength so highest drivers print first
+    all_passing_genes["Absolute_Weight"] = all_passing_genes[col].abs()
+    all_passing_genes = all_passing_genes.sort_values(by="Absolute_Weight", ascending=False)
+
+    total_found = len(all_passing_genes)
+    print(f"⚙️ Component {pc}: Found {total_found} genes passing the Method 1 threshold (>= {method1_threshold:.5f})")
+
+    if total_found == 0:
+        print(f"  ⚠️ Warning: No genes passed the threshold for {pc}.")
+        continue
+
+    # Batch query BioMart for symbols and descriptions via mygene API
+    ensembl_ids = all_passing_genes.index.tolist()
     query_results = mg.querymany(
         ensembl_ids,
         scopes="ensembl.gene",
@@ -61,22 +82,22 @@ for pc in ["PC1", "PC2"]:
             name_map[ens_id] = res.get("name", "Long non-coding RNA / Novel Feature")
 
     # Add annotations to dataframe
-    top_signed_genes["Gene_Symbol"] = top_signed_genes.index.map(symbol_map)
-    top_signed_genes["Gene_Name"] = top_signed_genes.index.map(name_map)
+    all_passing_genes["Gene_Symbol"] = all_passing_genes.index.map(symbol_map)
+    all_passing_genes["Gene_Name"] = all_passing_genes.index.map(name_map)
 
-    print(f"\n🚀 Top 20 Most Influential Driver Genes along {pc}:")
+    # 4. Print clean annotated tabular display
     print("-" * 115)
     print(f"{'Ensembl ID':<20} | {'Symbol':<15} | {'Weight':<10} | {'Direction':<12} | {'Full Gene Name'}")
     print("-" * 115)
 
-    for gene, row in top_signed_genes.iterrows():
+    for gene, row in all_passing_genes.iterrows():
         weight = row[col]
         direction = "📈 Positive" if weight > 0 else "📉 Negative"
         print(f"{gene:<20} | {row['Gene_Symbol']:<15} | {weight:+.4f} | {direction:<12} | {row['Gene_Name']}")
 
-    # Save complete annotated results to a clean output text file
-    top_signed_genes.to_csv(f"pca/{pc}_top_driving_genes_annotated.tsv", sep="\t")
-
-print("\n" + "-" * 115)
-print(
-    "Loadings files successfully saved to 'pca/PC1_top_driving_genes_annotated.tsv' and 'pca/PC2_top_driving_genes_annotated.tsv'!")
+    # Save all passing annotated results to a clean output text file
+    output_tsv = f"pca/{pc}_method1_passing_genes.tsv"
+    # Clean up tracking column before exporting
+    all_passing_genes.drop(columns=["Absolute_Weight"]).to_csv(output_tsv, sep="\t")
+    print("-" * 115)
+    print(f"Saved {total_found} thresholded variables to: {output_tsv}\n")
