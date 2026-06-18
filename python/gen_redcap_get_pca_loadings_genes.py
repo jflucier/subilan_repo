@@ -1,8 +1,10 @@
 import pandas as pd
 import numpy as np
+from sklearn.decomposition import PCA
+from sklearn.preprocessing import StandardScaler
+import mygene
 
-# 1. Reconstruct your PCA transformation steps to grab components
-# We pull the inputs exactly as processed inside your filter_redcap_fpkm_matrix.py script
+# 1. Reconstruct your PCA transformation steps
 print("Loading expression profile matrix...")
 fpkm_df = pd.read_csv("fpkm_matrix_cleaned.tsv", sep="\t", index_col=0)
 
@@ -12,9 +14,6 @@ pca_input = pca_input.loc[:, pca_input.var() > 0.1]
 pca_input_log = np.log2(pca_input + 1)
 
 # Fit PCA to extract feature components
-from sklearn.decomposition import PCA
-from sklearn.preprocessing import StandardScaler
-
 scaler = StandardScaler()
 scaled_data = scaler.fit_transform(pca_input_log)
 
@@ -28,25 +27,56 @@ loadings = pd.DataFrame(
     index=pca_input.columns
 )
 
-# 3. Export top positive and negative driving variables
-print("\n" + "=" * 70)
-print("🧬 TOP DRIVING GENES RESPONSIBLE FOR HISTOGRAM SHIFTS 🧬")
-print("=" * 70)
+# 3. Export top driving variables with full BioMart annotations
+print("\n" + "=" * 115)
+print("🧬 TOP DRIVING GENES WITH BIOMART ANNOTATIONS 🧬")
+print("=" * 115)
+
+mg = mygene.MyGeneInfo()
 
 for pc in ["PC1", "PC2"]:
     col = f"{pc}_Loading"
 
     # Highest absolute weights indicate highest directional variance influence
     top_genes = loadings[col].abs().sort_values(ascending=False).head(20)
-    top_signed_genes = loadings.loc[top_genes.index, [col]]
+    top_signed_genes = loadings.loc[top_genes.index, [col]].copy()
+
+    # Batch query BioMart for Symbols and Names via mygene
+    ensembl_ids = top_signed_genes.index.tolist()
+    query_results = mg.querymany(
+        ensembl_ids,
+        scopes="ensembl.gene",
+        fields="symbol,name",
+        species="human",
+        verbose=False
+    )
+
+    # Map query elements into local mappers
+    symbol_map = {}
+    name_map = {}
+    for res in query_results:
+        ens_id = res.get("query")
+        if ens_id:
+            symbol_map[ens_id] = res.get("symbol", "Uncharacterized")
+            name_map[ens_id] = res.get("name", "Long non-coding RNA / Novel Feature")
+
+    # Add annotations to dataframe
+    top_signed_genes["Gene_Symbol"] = top_signed_genes.index.map(symbol_map)
+    top_signed_genes["Gene_Name"] = top_signed_genes.index.map(name_map)
 
     print(f"\n🚀 Top 20 Most Influential Driver Genes along {pc}:")
-    print("-" * 50)
-    for gene, weight in top_signed_genes[col].items():
-        direction = "📈 Positive Shift" if weight > 0 else "📉 Negative Shift"
-        print(f"  - {gene:<20} | Weight = {weight:+.4f} ({direction})")
+    print("-" * 115)
+    print(f"{'Ensembl ID':<20} | {'Symbol':<15} | {'Weight':<10} | {'Direction':<12} | {'Full Gene Name'}")
+    print("-" * 115)
 
-    # Save coordinate results to a clean output text file
-    top_signed_genes.to_csv(f"pca/{pc}_top_driving_genes.tsv", sep="\t")
+    for gene, row in top_signed_genes.iterrows():
+        weight = row[col]
+        direction = "📈 Positive" if weight > 0 else "📉 Negative"
+        print(f"{gene:<20} | {row['Gene_Symbol']:<15} | {weight:+.4f} | {direction:<12} | {row['Gene_Name']}")
 
-print("\nLoadings files successfully saved to 'pca/PC1_top_driving_genes.tsv' and 'pca/PC2_top_driving_genes.tsv'!")
+    # Save complete annotated results to a clean output text file
+    top_signed_genes.to_csv(f"pca/{pc}_top_driving_genes_annotated.tsv", sep="\t")
+
+print("\n" + "-" * 115)
+print(
+    "Loadings files successfully saved to 'pca/PC1_top_driving_genes_annotated.tsv' and 'pca/PC2_top_driving_genes_annotated.tsv'!")
