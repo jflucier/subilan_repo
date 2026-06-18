@@ -21,33 +21,48 @@ def run_enrichment_for_component(pc_name):
         print(f"⚠️ Skipping {pc_name}: Too few characterized gene symbols to run significant enrichment.")
         return
 
-    # 2. Run over human functional pathways using the gseapy backend wrapper
+    # 2. Run over human functional pathways (Setting a relaxed cutoff of 1.0 to capture suggestive trends)
     try:
         enr = gp.enrichr(
             gene_list=gene_list,
             gene_sets=['Reactome_2022', 'KEGG_2021_Human'],
             organism='human',
             outdir=f'pca/enrichment_results/{pc_name}',
-            cutoff=0.05
+            cutoff=1.0  # Captures all suggestive pathways for exploratory view
         )
 
-        # 3. Print a ranked summary table directly to your terminal screen
         results_df = enr.results
-        if not results_df.empty:
-            # Filter for statistically significant entries
-            # gseapy column names for Enrichr outputs are typically 'Adjusted P-value'
-            sig_results = results_df[results_df["Adjusted P-value"] <= 0.05]
-            print(f"🏆 TOP SIGNIFICANT PATHWAYS FOR {pc_name}:")
-            print("-" * 115)
-            if not sig_results.empty:
-                print(sig_results[['Gene_Set', 'Term', 'Adjusted P-value', 'Genes']].head(10).to_string(index=False))
+
+        # 3. Print summaries safely by verifying index footprints first
+        print(f"\n🏆 FUNCTIONAL PATHWAY PROFILE FOR {pc_name} (ACUTE SEVERITY):")
+        print("-" * 115)
+
+        if not results_df.empty and "Term" in results_df.columns:
+            # Sort strictly by nominal P-value to pull strongest biological trends to the top
+            results_df = results_df.sort_values(by="P-value", ascending=True)
+
+            # Separate into significant vs suggestive blocks
+            if "Adjusted P-value" in results_df.columns:
+                sig_results = results_df[results_df["Adjusted P-value"] <= 0.05]
             else:
-                print("No single pathway passed the strict Adjusted P-value <= 0.05 FDR threshold.")
-                print("Top suggestive terms instead:")
-                print(results_df[['Gene_Set', 'Term', 'P-value', 'Genes']].head(3).to_string(index=False))
-            print("-" * 115)
+                sig_results = pd.DataFrame()
+
+            if not sig_results.empty:
+                print("✅ Statistically Significant Terms found (FDR <= 0.05):")
+                cols_to_print = [c for c in ['Gene_Set', 'Term', 'Adjusted P-value', 'Genes'] if
+                                 c in results_df.columns]
+                print(sig_results[cols_to_print].head(10).to_string(index=False))
+            else:
+                print("ℹ️ No terms passed the strict Adjusted P-value <= 0.05 FDR threshold.")
+                print("   Displaying Top 10 Suggestive Trends (Ranked by raw nominal P-value):")
+                print("." * 115)
+                cols_to_print = [c for c in ['Gene_Set', 'Term', 'P-value', 'Adjusted P-value', 'Genes'] if
+                                 c in results_df.columns]
+                print(results_df[cols_to_print].head(10).to_string(index=False))
         else:
-            print("No matching records returned from the enrichment database.")
+            print("❌ No matching records returned from the enrichment database libraries.")
+
+        print("-" * 115)
 
     except Exception as e:
         print(f"❌ Enrichment execution failed for {pc_name}: {str(e)}")
