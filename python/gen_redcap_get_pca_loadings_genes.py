@@ -1,31 +1,13 @@
-import pandas as pd
-import numpy as np
-from sklearn.decomposition import PCA
-from sklearn.preprocessing import StandardScaler
-import mygene
-import math
-
-# 1. Reconstruct your PCA transformation steps
-print("Loading expression profile matrix...")
-fpkm_df = pd.read_csv("fpkm_matrix_cleaned.tsv", sep="\t", index_col=0)
-
-# Re-apply identical transformations
-pca_input = fpkm_df.T
-pca_input = pca_input.loc[:, pca_input.var() > 0.1]
-pca_input_log = np.log2(pca_input + 1)
-
-# --- DYNAMICALLY DETERMINE PRECISE GENE COUNT ---
-num_genes = pca_input.shape[1]
-uniform_baseline = 1.0 / math.sqrt(num_genes)
-# Set target threshold at 2.5 times background noise to extract true signals
-method1_threshold = 2.5 * uniform_baseline
+# --- REVISED MULTIPLE FOR PATHWAY ENRICHMENT ---
+# Changing to 1.5x background noise yields a robust list for pathway tools
+method1_threshold = 1.5 * uniform_baseline
 
 print("\n" + "=" * 75)
-print("📊 DYNAMIC MATHEMATICAL INTEGRITY AUDIT")
+print("📊 DYNAMIC MATHEMATICAL INTEGRITY AUDIT (ADJUSTED FOR PATHWAYS)")
 print("=" * 75)
 print(f"  - Precise Number of Post-Variance Genes (N) : {num_genes}")
 print(f"  - Uniform Distribution Background Baseline   : {uniform_baseline:.5f}")
-print(f"  - Method 1 Mathematical Cutoff (2.5x Noise) : {method1_threshold:.5f}")
+print(f"  - Method 1 Mathematical Cutoff (1.5x Noise) : {method1_threshold:.5f}")
 print("=" * 75 + "\n")
 
 # Fit PCA to extract feature components
@@ -48,7 +30,7 @@ mg = mygene.MyGeneInfo()
 for pc in ["PC1", "PC2"]:
     col = f"{pc}_Loading"
 
-    # --- METHOD 1 DYNAMIC FILTER: Capture all genes exceeding the threshold ---
+    # Capture all genes exceeding the revised 1.5x background threshold
     all_passing_genes = loadings[loadings[col].abs() >= method1_threshold].copy()
 
     # Sort by absolute strength so highest drivers print first
@@ -56,11 +38,14 @@ for pc in ["PC1", "PC2"]:
     all_passing_genes = all_passing_genes.sort_values(by="Absolute_Weight", ascending=False)
 
     total_found = len(all_passing_genes)
-    print(f"⚙️ Component {pc}: Found {total_found} genes passing the Method 1 threshold (>= {method1_threshold:.5f})")
+    print(f"⚙️ Component {pc}: Found {total_found} genes passing the adjusted threshold (>= {method1_threshold:.5f})")
 
     if total_found == 0:
         print(f"  ⚠️ Warning: No genes passed the threshold for {pc}.")
         continue
+
+    # Slice output display to top 25 in terminal to avoid console flooding, but save ALL to TSV
+    display_genes = all_passing_genes.head(25)
 
     # Batch query BioMart for symbols and descriptions via mygene API
     ensembl_ids = all_passing_genes.index.tolist()
@@ -85,19 +70,20 @@ for pc in ["PC1", "PC2"]:
     all_passing_genes["Gene_Symbol"] = all_passing_genes.index.map(symbol_map)
     all_passing_genes["Gene_Name"] = all_passing_genes.index.map(name_map)
 
-    # 4. Print clean annotated tabular display
+    # 4. Print clean annotated tabular display (showing first 25 preview rows)
+    print("-" * 115)
+    print(f"Displaying top 25 / {total_found} total passing genes for {pc}:")
     print("-" * 115)
     print(f"{'Ensembl ID':<20} | {'Symbol':<15} | {'Weight':<10} | {'Direction':<12} | {'Full Gene Name'}")
     print("-" * 115)
 
-    for gene, row in all_passing_genes.iterrows():
+    for gene, row in all_passing_genes.head(25).iterrows():
         weight = row[col]
         direction = "📈 Positive" if weight > 0 else "📉 Negative"
         print(f"{gene:<20} | {row['Gene_Symbol']:<15} | {weight:+.4f} | {direction:<12} | {row['Gene_Name']}")
 
     # Save all passing annotated results to a clean output text file
     output_tsv = f"pca/{pc}_method1_passing_genes.tsv"
-    # Clean up tracking column before exporting
     all_passing_genes.drop(columns=["Absolute_Weight"]).to_csv(output_tsv, sep="\t")
     print("-" * 115)
-    print(f"Saved {total_found} thresholded variables to: {output_tsv}\n")
+    print(f"Saved ALL {total_found} thresholded variables to: {output_tsv}\n")
