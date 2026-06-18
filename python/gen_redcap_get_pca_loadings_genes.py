@@ -1,5 +1,23 @@
-# --- REVISED MULTIPLE FOR PATHWAY ENRICHMENT ---
-# Changing to 1.5x background noise yields a robust list for pathway tools
+import pandas as pd
+import numpy as np
+from sklearn.decomposition import PCA
+from sklearn.preprocessing import StandardScaler
+import mygene
+import math
+
+# 1. Reconstruct your PCA transformation steps
+print("Loading expression profile matrix...")
+fpkm_df = pd.read_csv("fpkm_matrix_cleaned.tsv", sep="\t", index_col=0)
+
+# Re-apply identical transformations
+pca_input = fpkm_df.T
+pca_input = pca_input.loc[:, pca_input.var() > 0.1]
+pca_input_log = np.log2(pca_input + 1)
+
+# --- FIX: Define variables AFTER loading data so shapes are accessible ---
+num_genes = pca_input.shape[1]
+uniform_baseline = 1.0 / math.sqrt(num_genes)
+# Set target threshold at 1.5 times background noise to extract functional pathways
 method1_threshold = 1.5 * uniform_baseline
 
 print("\n" + "=" * 75)
@@ -43,9 +61,6 @@ for pc in ["PC1", "PC2"]:
     if total_found == 0:
         print(f"  ⚠️ Warning: No genes passed the threshold for {pc}.")
         continue
-
-    # Slice output display to top 25 in terminal to avoid console flooding, but save ALL to TSV
-    display_genes = all_passing_genes.head(25)
 
     # Batch query BioMart for symbols and descriptions via mygene API
     ensembl_ids = all_passing_genes.index.tolist()
