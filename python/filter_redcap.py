@@ -52,11 +52,10 @@ for chunk in pd.read_csv(csv_filename, usecols=valid_columns, chunksize=chunk_si
     chunk.to_csv(temp_filename, mode='a', index=False, header=first_chunk)
     first_chunk = False
 
-# 5. Load extracted data
+# 5. Load extracted data and analyze conflicts with exact raw header indexes
 print("Analyzing dataset for longitudinal value conflicts...")
 raw_extracted_df = pd.read_csv(temp_filename, low_memory=False)
 
-# --- NEW: Identify columns with multiple distinct values per patient ---
 # Count unique non-null values per patient per column
 unique_counts = raw_extracted_df.groupby("BQC ID").nunique(dropna=True)
 
@@ -66,9 +65,15 @@ conflicting_cols = unique_counts.columns[(unique_counts > 1).any()].tolist()
 print(f"\n--- COLUMNS WITH MULTIPLE DISTINCT VALUES FOUND ({len(conflicting_cols)}) ---")
 if conflicting_cols:
     for col in conflicting_cols:
-        # Calculate how many patients actually have conflicting rows for this variable
+        # Find the column's exact 0-indexed position in the original raw spreadsheet
+        try:
+            raw_index = header.index(col)
+        except ValueError:
+            # Fallback if the column name was normalized/changed during extraction
+            raw_index = "Extracted"
+
         num_patients_conflicted = (unique_counts[col] > 1).sum()
-        print(f"  - {col} (found conflicts in {num_patients_conflicted} patients)")
+        print(f"  - [Raw Col Index: {raw_index}] {col} ({num_patients_conflicted} patients conflicted)")
 else:
     print("  None! Every column holds perfectly consistent values across rows for all patients.")
 print("----------------------------------------------------------------\n")
