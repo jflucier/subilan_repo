@@ -73,29 +73,37 @@ for gset in gene_libraries:
     except Exception as e:
         print(f"   ❌ Preranked execution failed for library {gset}: {str(e)}")
 
-# 4. Compile and print top comprehensive pathway trends
+# 4. Compile and print top comprehensive pathway trends cleanly
 print("\n" + "=" * 115)
 print("🏆 TOP BIOLOGICAL PATHWAYS DRIVING YOUR WHO SEVERITY GRADIENT (PRERANKED GSEA) 🏆")
 print("=" * 115)
 
 if compiled_results:
     gsea_results = pd.concat(compiled_results, ignore_index=True)
-    gsea_results["Abs_NES"] = gsea_results["NES"].abs()
-    gsea_results = gsea_results.sort_values(by="Abs_NES", ascending=False)
 
-    # Save the complete integrated file to disk
-    gsea_results.drop(columns=["Abs_NES"]).to_csv("pca/gsea_preranked_compiled_results.tsv", sep="\t", index=False)
+    # Check if 'NES' column actually exists in the compiled outputs
+    if "NES" in gsea_results.columns and not gsea_results["NES"].isna().all():
+        gsea_results["Abs_NES"] = gsea_results["NES"].abs()
+        gsea_results = gsea_results.sort_values(by="Abs_NES", ascending=False)
 
-    # Standard biological discovery cutoff threshold for Preranked GSEA is FDR <= 0.25
-    sig_gsea = gsea_results[gsea_results["FDR q-val"] <= 0.25]
-    cols_to_print = ['Library', 'Term', 'NES', 'NOM p-val', 'FDR q-val']
+        # Save the complete integrated file to disk cleanly
+        gsea_results.drop(columns=["Abs_NES"]).to_csv("pca/gsea_preranked_compiled_results.tsv", sep="\t", index=False)
 
-    if not sig_gsea.empty:
-        print("✅ Statistically Significant Pathways found (FDR <= 0.25):")
-        print(sig_gsea[cols_to_print].head(15).to_string(index=False))
+        # Standard biological discovery cutoff threshold for Preranked GSEA is FDR <= 0.25
+        sig_gsea = gsea_results[gsea_results["FDR q-val"] <= 0.25]
+        cols_to_print = ['Library', 'Term', 'NES', 'NOM p-val', 'FDR q-val']
+
+        if not sig_gsea.empty:
+            print("✅ Statistically Significant Pathways found (FDR <= 0.25):")
+            print(sig_gsea[cols_to_print].head(15).to_string(index=False))
+        else:
+            print("ℹ️ No pathways hit the broad FDR <= 0.25 threshold. Displaying top trending pathways:")
+            print(gsea_results[cols_to_print].head(15).to_string(index=False))
     else:
-        print("ℹ️ No pathways hit the broad FDR <= 0.25 threshold. Displaying top trending pathways:")
-        print(gsea_results[cols_to_print].head(15).to_string(index=False))
+        print("⚠️ Warning: The GSEA run completed, but returned empty structural tables.")
+        print("This usually means the gene symbols in your gradient do not overlap with the database sets.")
+        print("\nAvailable columns in returned structure:")
+        print(gsea_results.columns.tolist())
 else:
-    print("No comprehensive pathways returned from the calculation matrix.")
+    print("❌ No comprehensive pathways returned from the calculation matrix loops.")
 print("-" * 115)
