@@ -9,7 +9,7 @@ counts_df = pd.read_csv("star/raw_counts_matrix.tsv", sep="\t", index_col=0)
 # --- ADD THIS LINE TO COLLAPSE DUPLICATES ---
 counts_df = counts_df.groupby(level=0).sum()
 # --------------------------------------------
-clinical_df = pd.read_csv("redcap.filtered_output.csv", sep="\t")
+clinical_df = pd.read_csv("redcap.filtered_output.tsv", sep="\t")
 
 # Clean matrix column headers: 'star/alignment/BQC19719.VAR15535-23_trimmed_clean' -> 'BQC19719.VAR15535-23_trimmed_clean'
 counts_df.columns = [os.path.basename(col) for col in counts_df.columns]
