@@ -8,10 +8,12 @@ with open("redcap_tokeep.txt", "r", encoding="utf-8") as f:
 
 csv_filename = "/jbod2/def-gimap5/20250923_BQC19/data/clinical/redcap_clinical_data_label_2024-04-11.csv"
 
-# Read the header using python csv engine to perfectly respect quoted commas
-with open(csv_filename, "r", encoding="utf-8") as f:
+# --- FIX: Use utf-8-sig to automatically strip the hidden \ufeff BOM character ---
+with open(csv_filename, "r", encoding="utf-8-sig") as f:
     reader = csv.reader(f)
     header = next(reader)
+# ---------------------------------------------------------------------------------
+
 
 # 2. Build a normalized mapping dictionary
 def normalize(text):
