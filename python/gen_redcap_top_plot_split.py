@@ -14,7 +14,6 @@ for c in df.columns:
 fig, axes = plt.subplots(1, 2, figsize=(20, 8), dpi=300)
 
 # --- PLOT 1: Baseline Comorbidity (Diabetes) ---
-# Filters out missing records to ensure a clean categorical plot
 df_diabetes = df.dropna(subset=["Diabetes ?"])
 sns.scatterplot(
     data=df_diabetes,
@@ -35,7 +34,7 @@ df_who = df.dropna(subset=[who_col])
 # Exclude generic text strings like "nan" or "Unknown" if present
 df_who = df_who[~df_who[who_col].str.lower().isin(["nan", "unknown", "missing"])]
 
-# Sort categories logically if they follow a numerical scale or string hierarchy
+# Sort categories logically
 categories = sorted(df_who[who_col].unique())
 
 sns.scatterplot(
@@ -47,7 +46,8 @@ sns.scatterplot(
     alpha=0.6, s=20, edgecolor=None,
     ax=axes[1]
 )
-axes[1].set_title("PCA Split by Acute Disease Response\n(WHO Severity Level)", fontsize=14, weight='bold')
+# --- UPDATED SUBPLOT TITLE ---
+axes[1].set_title("SARS-CoV-2 severe severity level (according to WHO)", fontsize=14, weight='bold')
 axes[1].set_xlabel("PC1 (37.62% Var)", fontsize=11)
 axes[1].set_ylabel("PC2 (10.38% Var) - Tracks Infection Severity", fontsize=11)
 axes[1].legend(title="WHO Level", bbox_to_anchor=(1.05, 1), loc='upper left')
