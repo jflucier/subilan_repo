@@ -73,10 +73,12 @@ else:
     print("  None! Every column holds perfectly consistent values across rows for all patients.")
 print("----------------------------------------------------------------\n")
 
-# 6. Flatten longitudinal records and save
+# 6. Flatten longitudinal records with advanced clinical logic and save
 print("Flattening repeated longitudinal records to one row per patient using targeted logic...")
 
-# Define specialized columns that require mathematical maximums instead of earliest entries
+# Ensure column fragmentations are defragmented to appease pandas
+raw_extracted_df = raw_extracted_df.copy()
+
 max_value_columns = [
     "Did or does the patient receive ventilatory support?",
     "Venous lactate:",
@@ -84,15 +86,32 @@ max_value_columns = [
     "IL-6:"
 ]
 
-# We will separate the aggregation process into two steps to handle traits cleanly
+# --- FIX: Standardize Ventilatory Support string representations if they exist ---
+vent_col = "Did or does the patient receive ventilatory support?"
+if vent_col in raw_extracted_df.columns:
+    # Safely map common representations to standard binary numbers
+    # This ensures .max() will always correctly select the positive clinical case (1 over 0)
+    mapping_dict = {"yes": 1, "no": 0, "1": 1, "0": 0, "true": 1, "false": 0, 1: 1, 0: 0}
+    raw_extracted_df[vent_col] = raw_extracted_df[vent_col].astype(str).str.lower().str.strip().map(mapping_dict)
+
+# Force numeric transformation across remaining metric tracking parameters
+for col in ["Venous lactate:", "D-Dimer:", "IL-6:"]:
+    if col in raw_extracted_df.columns:
+        raw_extracted_df[col] = pd.to_numeric(raw_extracted_df[col], errors='coerce')
+
 # Step A: Aggregate standard baseline features using the first populated value
 base_flattened = raw_extracted_df.groupby("BQC ID", as_index=False).first()
 
 # Step B: Aggregate highly dynamic physiological metrics using the maximum value observed
-metrics_flattened = raw_extracted_df.groupby("BQC ID", as_index=False)[max_value_columns].max()
+# Selecting only the target columns explicitly avoids the future pandas TypeError
+metrics_flattened = raw_extracted_df.groupby("BQC ID", as_index=False)[["BQC ID"] + max_value_columns].max()
 
 # Step C: Merge both profiles together on the BQC ID key
-flattened_df = pd.merge(base_flattened.drop(columns=max_value_columns), metrics_flattened, on="BQC ID")
+flattened_df = pd.merge(
+    base_flattened.drop(columns=[c for c in max_value_columns if c in base_flattened.columns]),
+    metrics_flattened,
+    on="BQC ID"
+)
 
 flattened_df.to_csv(final_filename, index=False)
 
