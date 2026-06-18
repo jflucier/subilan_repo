@@ -21,8 +21,8 @@ scaled_data = scaler.fit_transform(pca_input_log)
 pca = PCA(n_components=2)
 pca.fit(scaled_data)
 
-# --- FIX: Explicitly grab row index 1 to isolate PC2 (Infection Severity) Weights ---
-pc2_weights = pca.components_[1]
+# Isolate PC2 (Infection Severity) Weights
+pc2_weights = pca.components_[1]  # Index 1 is exactly PC2
 rank_df = pd.DataFrame(pc2_weights, index=pca_input.columns, columns=["Weight"])
 
 # 2. Annotate ALL genes to fetch maximum possible human symbols
@@ -36,7 +36,6 @@ rank_df["Symbol"] = rank_df.index.map(symbol_map)
 
 # Remove uncharacterized markers and sort continuously from top positive to lowest negative weight
 rank_df = rank_df.dropna(subset=["Symbol"])
-# Deduplicate symbols if any duplicates exist by keeping the one with highest absolute loading weight
 rank_df["Abs_Weight"] = rank_df["Weight"].abs()
 rank_df = rank_df.sort_values("Abs_Weight", ascending=False).drop_duplicates(subset=["Symbol"])
 rank_df = rank_df.sort_values(by="Weight", ascending=False)
@@ -46,43 +45,57 @@ rnk_series = rank_df[["Symbol", "Weight"]]
 
 print(f"Submitting entire continuous gradient ({len(rnk_series)} ranked genes) to Preranked GSEA engine...")
 
-# 3. Execute the Preranked Pathway Analysis
-try:
-    pre_res = gp.prerank(
-        rnk=rnk_series,
-        gene_sets=['Reactome_2022', 'KEGG_2021_Human'],
-        processes=12,  # --- FIX: Changed from 'threads' to 'processes' ---
-        min_size=5,
-        max_size=500,
-        permutation_num=1000,  # Runs 1000 background permutations for statistical validation
-        outdir='pca/gsea_preranked_results',
-        seed=42
-    )
+# 3. Loop through individual gene sets sequentially to prevent parsing crashes
+gene_libraries = ['Reactome_2022', 'KEGG_2021_Human']
+compiled_results = []
 
-    # 4. Filter and display top results
-    gsea_results = pre_res.res2d
+for gset in gene_libraries:
+    print(f"\n🚀 Running 1,000 permutations over pathway library: {gset}...")
+    try:
+        out_directory = f'pca/gsea_preranked_results/{gset}'
+        pre_res = gp.prerank(
+            rnk=rnk_series,
+            gene_sets=gset,  # Pass exactly one string library name per run iteration
+            processes=4,
+            min_size=5,
+            max_size=500,
+            permutation_num=1000,
+            outdir=out_directory,
+            seed=42
+        )
 
-    print("\n" + "=" * 115)
-    print("🏆 TOP BIOLOGICAL PATHWAYS DRIVING YOUR WHO SEVERITY GRADIENT (PRERANKED GSEA) 🏆")
-    print("=" * 115)
-    if not gsea_results.empty:
-        # Sort by absolute Normalized Enrichment Score to find strongest pathways on both ends
-        gsea_results["Abs_NES"] = gsea_results["NES"].abs()
-        gsea_results = gsea_results.sort_values(by="Abs_NES", ascending=False)
+        # Capture internal result data frame layer
+        res_df = pre_res.res2d
+        if not res_df.empty:
+            res_df["Library"] = gset
+            compiled_results.append(res_df)
 
-        # In GSEA Preranked, an FDR (q-val) <= 0.25 is the standard discovery threshold
-        sig_gsea = gsea_results[gsea_results["FDR q-val"] <= 0.25]
-        cols_to_print = ['Term', 'ES', 'NES', 'NOM p-val', 'FDR q-val']
+    except Exception as e:
+        print(f"   ❌ Preranked execution failed for library {gset}: {str(e)}")
 
-        if not sig_gsea.empty:
-            print("✅ Statistically Significant Pathways found (FDR <= 0.25):")
-            print(sig_gsea[cols_to_print].head(15).to_string(index=False))
-        else:
-            print("ℹ️ No pathways hit the broad FDR <= 0.25 threshold. Displaying top trending pathways:")
-            print(gsea_results[cols_to_print].head(15).to_string(index=False))
+# 4. Compile and print top comprehensive pathway trends
+print("\n" + "=" * 115)
+print("🏆 TOP BIOLOGICAL PATHWAYS DRIVING YOUR WHO SEVERITY GRADIENT (PRERANKED GSEA) 🏆")
+print("=" * 115)
+
+if compiled_results:
+    gsea_results = pd.concat(compiled_results, ignore_index=True)
+    gsea_results["Abs_NES"] = gsea_results["NES"].abs()
+    gsea_results = gsea_results.sort_values(by="Abs_NES", ascending=False)
+
+    # Save the complete integrated file to disk
+    gsea_results.drop(columns=["Abs_NES"]).to_csv("pca/gsea_preranked_compiled_results.tsv", sep="\t", index=False)
+
+    # Standard biological discovery cutoff threshold for Preranked GSEA is FDR <= 0.25
+    sig_gsea = gsea_results[gsea_results["FDR q-val"] <= 0.25]
+    cols_to_print = ['Library', 'Term', 'NES', 'NOM p-val', 'FDR q-val']
+
+    if not sig_gsea.empty:
+        print("✅ Statistically Significant Pathways found (FDR <= 0.25):")
+        print(sig_gsea[cols_to_print].head(15).to_string(index=False))
     else:
-        print("No pathways returned from the calculation matrix.")
-    print("-" * 115)
-
-except Exception as e:
-    print(f"❌ Preranked GSEA tracking run failed: {str(e)}")
+        print("ℹ️ No pathways hit the broad FDR <= 0.25 threshold. Displaying top trending pathways:")
+        print(gsea_results[cols_to_print].head(15).to_string(index=False))
+else:
+    print("No comprehensive pathways returned from the calculation matrix.")
+print("-" * 115)
