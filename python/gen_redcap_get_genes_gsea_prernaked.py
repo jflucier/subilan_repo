@@ -83,29 +83,41 @@ print("=" * 115)
 if compiled_results:
     gsea_results = pd.concat(compiled_results, ignore_index=True)
 
-    if "nes" in gsea_results.columns:
-        gsea_results["abs_nes"] = gsea_results["nes"].abs()
+    # Save a raw copy to disk immediately so your data is secure
+    gsea_results.to_csv("pca/gsea_preranked_compiled_results.tsv", sep="\t", index=False)
+
+    # Dynamically find case-insensitive columns
+    cols = {c.lower(): c for c in gsea_results.columns}
+
+    nes_col = cols.get("nes")
+    fdr_col = cols.get("fdr") or cols.get("fdr q-val") or cols.get("padj")
+    pval_col = cols.get("pval") or cols.get("nom p-val")
+    term_col = cols.get("term") or cols.get("name") or gsea_results.columns[0]
+    lib_col = cols.get("library") or "Library"
+
+    if nes_col and fdr_col:
+        # Sort by absolute NES to show strongest results
+        gsea_results["abs_nes"] = gsea_results[nes_col].abs()
         gsea_results = gsea_results.sort_values(by="abs_nes", ascending=False)
 
-        # Save the complete integrated file to disk cleanly
-        gsea_results.drop(columns=["abs_nes"]).to_csv("pca/gsea_preranked_compiled_results.tsv", sep="\t", index=False)
+        # Standard GSEA significance filter (FDR <= 0.25)
+        sig_gsea = gsea_results[gsea_results[fdr_col] <= 0.25]
 
-        # Standard biological discovery cutoff threshold for Preranked GSEA is FDR <= 0.25
-        sig_gsea = gsea_results[gsea_results["fdr"] <= 0.25]
-        cols_to_print = ['library', 'term', 'nes', 'pval', 'fdr']
-
-        # Ensure column lookup mapping matches forced lowercase values
-        gsea_results.rename(columns={'term': 'term'}, inplace=True)
+        # Build strict dynamic list of present columns to print
+        cols_to_print = [lib_col, term_col, nes_col, pval_col, fdr_col]
+        cols_to_print = [c for c in cols_to_print if c in gsea_results.columns]
 
         if not sig_gsea.empty:
-            print("✅ Statistically Significant Pathways found (FDR <= 0.25):")
+            print(f"✅ Statistically Significant Pathways found (FDR <= 0.25):")
+            print("-" * 115)
             print(sig_gsea[cols_to_print].head(15).to_string(index=False))
         else:
             print("ℹ️ No pathways hit the broad FDR <= 0.25 threshold. Displaying top trending pathways:")
+            print("-" * 115)
             print(gsea_results[cols_to_print].head(15).to_string(index=False))
     else:
-        print("⚠️ Warning: The GSEA run completed, but structural tables lack 'nes' column.")
-        print(f"Available columns: {gsea_results.columns.tolist()}")
+        print("⚠️ GSEA finished but structure differs. Printing raw dataframe sample slice:")
+        print(gsea_results.head(10).to_string())
 else:
     print("❌ No comprehensive pathways returned from the calculation matrix loops.")
 print("-" * 115)
