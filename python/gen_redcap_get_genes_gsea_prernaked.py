@@ -55,7 +55,7 @@ for gset in gene_libraries:
         out_directory = f'pca/gsea_preranked_results/{gset}'
         pre_res = gp.prerank(
             rnk=rnk_series,
-            gene_sets=gset,  # Pass exactly one string library name per run iteration
+            gene_sets=gset,
             processes=4,
             min_size=5,
             max_size=500,
@@ -64,13 +64,15 @@ for gset in gene_libraries:
             seed=42
         )
 
-        # Capture internal result data frame layer
-        res_df = pre_res.res2d
-        if not res_df.empty:
-            res_df["Library"] = gset
-            # Force columns to lowercase to standardize across various gseapy versions
-            res_df.columns = [c.lower() for c in res_df.columns]
-            compiled_results.append(res_df)
+        # --- FIX: Read the report.csv directly to ensure 'Term' index is captured as a column ---
+        report_file = os.path.join(out_directory, "gseapy.prerank.gene_sets.report.csv")
+        if os.path.exists(report_file):
+            res_df = pd.read_csv(report_file)
+            if not res_df.empty:
+                res_df["Library"] = gset
+                # Standardize column headers to lowercase
+                res_df.columns = [c.lower() for c in res_df.columns]
+                compiled_results.append(res_df)
 
     except Exception as e:
         print(f"   ❌ Preranked execution failed for library {gset}: {str(e)}")
@@ -82,42 +84,23 @@ print("=" * 115)
 
 if compiled_results:
     gsea_results = pd.concat(compiled_results, ignore_index=True)
+    gsea_results["abs_nes"] = gsea_results["nes"].abs()
+    gsea_results = gsea_results.sort_values(by="abs_nes", ascending=False)
 
-    # Save a raw copy to disk immediately so your data is secure
-    gsea_results.to_csv("pca/gsea_preranked_compiled_results.tsv", sep="\t", index=False)
+    # Save the integrated matrix permanently
+    gsea_results.drop(columns=["abs_nes"]).to_csv("pca/gsea_preranked_compiled_results.tsv", sep="\t", index=False)
 
-    # Dynamically find case-insensitive columns
-    cols = {c.lower(): c for c in gsea_results.columns}
+    sig_gsea = gsea_results[gsea_results["fdr"] <= 0.25]
+    cols_to_print = ['library', 'term', 'nes', 'pval', 'fdr']
 
-    nes_col = cols.get("nes")
-    fdr_col = cols.get("fdr") or cols.get("fdr q-val") or cols.get("padj")
-    pval_col = cols.get("pval") or cols.get("nom p-val")
-    term_col = cols.get("term") or cols.get("name") or gsea_results.columns[0]
-    lib_col = cols.get("library") or "Library"
-
-    if nes_col and fdr_col:
-        # Sort by absolute NES to show strongest results
-        gsea_results["abs_nes"] = gsea_results[nes_col].abs()
-        gsea_results = gsea_results.sort_values(by="abs_nes", ascending=False)
-
-        # Standard GSEA significance filter (FDR <= 0.25)
-        sig_gsea = gsea_results[gsea_results[fdr_col] <= 0.25]
-
-        # Build strict dynamic list of present columns to print
-        cols_to_print = [lib_col, term_col, nes_col, pval_col, fdr_col]
-        cols_to_print = [c for c in cols_to_print if c in gsea_results.columns]
-
-        if not sig_gsea.empty:
-            print(f"✅ Statistically Significant Pathways found (FDR <= 0.25):")
-            print("-" * 115)
-            print(sig_gsea[cols_to_print].head(15).to_string(index=False))
-        else:
-            print("ℹ️ No pathways hit the broad FDR <= 0.25 threshold. Displaying top trending pathways:")
-            print("-" * 115)
-            print(gsea_results[cols_to_print].head(15).to_string(index=False))
+    if not sig_gsea.empty:
+        print("✅ Statistically Significant Pathways found (FDR <= 0.25):")
+        print("-" * 115)
+        print(sig_gsea[cols_to_print].head(15).to_string(index=False))
     else:
-        print("⚠️ GSEA finished but structure differs. Printing raw dataframe sample slice:")
-        print(gsea_results.head(10).to_string())
+        print("ℹ️ No pathways hit the broad FDR <= 0.25 threshold. Displaying top trending pathways:")
+        print("-" * 115)
+        print(gsea_results[cols_to_print].head(15).to_string(index=False))
 else:
     print("❌ No comprehensive pathways returned from the calculation matrix loops.")
 print("-" * 115)
